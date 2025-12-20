@@ -37,6 +37,24 @@
 		"[INFO] SinkIn Worker ready.",
 	]);
 	let pollInterval: any;
+	let systemOnline = $state(true);
+
+	async function checkSystemHealth() {
+		try {
+			const res = await fetch("http://localhost:8000/api/health");
+			if (!res.ok) throw new Error("Health check failed");
+			if (!systemOnline) {
+				systemOnline = true;
+				addLog("[SUCCESS] System connection restored.");
+			}
+		} catch (e) {
+			if (systemOnline) {
+				systemOnline = false;
+				addLog("[CRITICAL] Verify API Connection. System offline.");
+				addLog("[ERROR] Database/Backend unavailable.");
+			}
+		}
+	}
 
 	function addLog(msg: string) {
 		const time = new Date().toLocaleTimeString([], {
@@ -178,6 +196,7 @@
 		pollInterval = setInterval(() => {
 			fetchRuns();
 			fetchQueue();
+			checkSystemHealth();
 		}, 5000);
 	});
 
@@ -706,6 +725,13 @@
 				{#if processingJob || processingAll}
 					<p class="text-yellow-400 mt-1 animate-pulse">
 						[RUNNING] Worker processing job stack...
+					</p>
+				{/if}
+				{#if !systemOnline}
+					<p
+						class="text-red-500 mt-1 font-bold animate-pulse bg-red-900/20 p-1"
+					>
+						[FATAL] CONNECTION LOST - RETRYING...
 					</p>
 				{/if}
 				<p class="mt-2 text-gray-500">_</p>
