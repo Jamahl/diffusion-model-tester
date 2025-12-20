@@ -31,6 +31,11 @@
         is_rated: boolean;
         is_failed: boolean;
         upscale_url: string | null;
+        score_fidelity?: number;
+        score_alignment?: number;
+        score_aesthetics?: number;
+        flaws?: string;
+        curation_status?: string;
     }
 
     let run = $state<Run | null>(null);
@@ -47,17 +52,19 @@
             );
             if (!res.ok) throw new Error("Run not found");
             const data = await res.json();
-            
+
             // Get config from first image if available
             let config = null;
             if (data.counts.total_images > 0) {
-                 const imgRes = await fetch(`http://localhost:8000/api/images?run_id=${page.params.id}&limit=1`);
-                 const imgData = await imgRes.json();
-                 if (imgData.images.length > 0) {
-                     config = imgData.images[0].config;
-                 }
+                const imgRes = await fetch(
+                    `http://localhost:8000/api/images?run_id=${page.params.id}&limit=1`,
+                );
+                const imgData = await imgRes.json();
+                if (imgData.images.length > 0) {
+                    config = imgData.images[0].config;
+                }
             }
-            
+
             run = { ...data, config };
         } catch (e: any) {
             error = e.message;
@@ -113,8 +120,6 @@
         }
     }
 
-    }
-
     async function toggleFailed(imageId: string, currentStatus: boolean) {
         try {
             const res = await fetch(
@@ -128,33 +133,14 @@
 
             if (res.ok) {
                 // Update local state
-                images = images.map(img => 
-                    img.id === imageId ? { ...img, is_failed: !currentStatus } : img
+                images = images.map((img) =>
+                    img.id === imageId
+                        ? { ...img, is_failed: !currentStatus }
+                        : img,
                 );
-                toasts.success(`Image marked as ${!currentStatus ? 'failed' : 'restored'}`);
-            }
-        } catch (e) {
-            toasts.error("Failed to update status");
-        }
-    }
-
-    async function toggleFailed(imageId: string, currentStatus: boolean) {
-        try {
-            const res = await fetch(
-                `http://localhost:8000/api/images/${imageId}/score`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ is_failed: !currentStatus }),
-                },
-            );
-
-            if (res.ok) {
-                // Update local state
-                images = images.map(img => 
-                    img.id === imageId ? { ...img, is_failed: !currentStatus } : img
+                toasts.success(
+                    `Image marked as ${!currentStatus ? "failed" : "restored"}`,
                 );
-                toasts.success(`Image marked as ${!currentStatus ? 'failed' : 'restored'}`);
             }
         } catch (e) {
             toasts.error("Failed to update status");

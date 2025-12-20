@@ -28,6 +28,12 @@
             use_again: "yes" | "no" | "test_more" | null;
             prompt_adherence: number | null;
             background_score: number | null;
+            // New RLHF Fields
+            score_fidelity: number | null;
+            score_alignment: number | null;
+            score_aesthetics: number | null;
+            flaws: string | null; // JSON string
+            curation_status: string | null;
         };
         config: Config;
         run: {
@@ -449,129 +455,170 @@
                         >
                     </div>
                 </div>
-                <!-- Detailed Grading -->
+                <!-- Detailed Grading (RLHF-Style) -->
                 <div class="flex flex-col gap-1 p-1 win95-window">
                     <div
                         class="bg-blue-800 text-white px-2 py-0.5 text-[9px] font-bold uppercase flex justify-between items-center mb-2"
                     >
-                        <span>DETAILED_GRADING</span>
+                        <span>EVALUATION MATRIX</span>
                         <span class="material-symbols-outlined text-[14px]"
-                            >fact_check</span
+                            >tune</span
                         >
                     </div>
-                    <div class="p-3 flex flex-col gap-5">
-                        <div class="flex flex-col gap-1">
-                            <div
-                                class="flex justify-between items-center text-[10px] font-bold mb-1"
-                            >
-                                <span class="uppercase tracking-wider"
-                                    >Anatomy Adherence</span
+
+                    <div class="p-3 flex flex-col gap-4">
+                        <!-- Helper component for Stars -->
+                        {#snippet StarRater(
+                            label: string,
+                            field:
+                                | "score_fidelity"
+                                | "score_alignment"
+                                | "score_aesthetics",
+                            helpText: string,
+                        )}
+                            <div class="flex flex-col gap-1 group relative">
+                                <div
+                                    class="flex justify-between items-center text-[10px] font-bold mb-1"
                                 >
-                                <span class="font-pixel text-blue-700 text-sm"
-                                    >{image.scores.anatomy_score || "-"}</span
-                                >
+                                    <span
+                                        class="uppercase tracking-wider flex items-center gap-1 cursor-help relative"
+                                    >
+                                        {label}
+                                        <span
+                                            class="material-symbols-outlined text-[10px] opacity-40"
+                                            >help</span
+                                        >
+                                        <!-- Tooltip -->
+                                        <span
+                                            class="absolute left-0 bottom-full mb-1 w-48 bg-[#ffffe0] text-black border border-black p-2 text-[9px] font-normal normal-case shadow-[2px_2px_0_0_rgba(0,0,0,0.5)] z-50 hidden group-hover:block pointer-events-none"
+                                        >
+                                            {helpText}
+                                        </span>
+                                    </span>
+                                    <span
+                                        class="font-pixel text-blue-700 text-sm"
+                                        >{image?.scores?.[field] || "-"}</span
+                                    >
+                                </div>
+                                <div class="flex gap-1">
+                                    {#each [1, 2, 3, 4, 5] as star}
+                                        <button
+                                            class="w-6 h-6 flex items-center justify-center border border-transparent hover:scale-110 active:scale-95 transition-transform"
+                                            onclick={() =>
+                                                updateScore({ [field]: star })}
+                                        >
+                                            <span
+                                                class="material-symbols-outlined text-[18px] {(image
+                                                    ?.scores?.[field] || 0) >=
+                                                star
+                                                    ? 'text-yellow-500 fill-current'
+                                                    : 'text-gray-400 opacity-30'}"
+                                            >
+                                                star
+                                            </span>
+                                        </button>
+                                    {/each}
+                                </div>
                             </div>
-                            <input
-                                type="range"
-                                min="1"
-                                max="10"
-                                step="1"
-                                value={image.scores.anatomy_score || 5}
-                                onchange={(e) =>
-                                    updateScore({
-                                        anatomy_score: parseInt(
-                                            e.currentTarget.value,
-                                        ),
-                                    })}
-                                class="range-retro"
-                            />
-                        </div>
-                        <div class="flex flex-col gap-1">
+                        {/snippet}
+
+                        {@render StarRater(
+                            "Visual Fidelity",
+                            "score_fidelity",
+                            "Is the image crisp, sharp, and free of artifacts? Rate technical quality.",
+                        )}
+                        {@render StarRater(
+                            "Prompt Alignment",
+                            "score_alignment",
+                            "Did it execute the prompt accurately? Does it contain all requested elements?",
+                        )}
+                        {@render StarRater(
+                            "Aesthetics",
+                            "score_aesthetics",
+                            "Is it artistically pleasing? Good lighting, composition, and 'vibe'?",
+                        )}
+
+                        <hr class="border-t border-gray-400 my-1" />
+
+                        <!-- Flaw Detector -->
+                        <div class="flex flex-col gap-2">
                             <div
-                                class="flex justify-between items-center text-[10px] font-bold mb-1"
+                                class="text-[10px] font-bold uppercase tracking-widest text-win-purple mb-1 tooltip-container relative group w-fit"
                             >
-                                <span class="uppercase tracking-wider"
-                                    >Prompt Adherence</span
+                                DEFECT_DETECTION
+                                <span
+                                    class="material-symbols-outlined text-[10px] opacity-40 inline-block align-middle ml-1"
+                                    >help</span
                                 >
-                                <span class="font-pixel text-win-purple text-sm"
-                                    >{image.scores.prompt_adherence ||
-                                        "-"}</span
+                                <span
+                                    class="absolute left-0 bottom-full mb-1 w-48 bg-[#ffffe0] text-black border border-black p-2 text-[9px] font-normal normal-case shadow-[2px_2px_0_0_rgba(0,0,0,0.5)] z-50 hidden group-hover:block pointer-events-none"
                                 >
+                                    Select all specific issues found in this
+                                    generation. Helps identify model weaknesses.
+                                </span>
                             </div>
-                            <input
-                                type="range"
-                                min="1"
-                                max="10"
-                                step="1"
-                                value={image.scores.prompt_adherence || 5}
-                                onchange={(e) =>
-                                    updateScore({
-                                        prompt_adherence: parseInt(
-                                            e.currentTarget.value,
-                                        ),
-                                    })}
-                                class="range-retro"
-                            />
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <div
-                                class="flex justify-between items-center text-[10px] font-bold mb-1"
-                            >
-                                <span class="uppercase tracking-wider"
-                                    >Background Fidelity</span
-                                >
-                                <span class="font-pixel text-pink-600 text-sm"
-                                    >{image.scores.background_score ||
-                                        "-"}</span
-                                >
+                            <div class="flex flex-wrap gap-1.5">
+                                {#each ["Bad Hands", "Distorted Face", "Limb Fusion", "Artifacts", "Blurry", "Bleeding", "Cropped", "Text Error", "Watermark"] as flaw}
+                                    {@const currentFlaws = image?.scores?.flaws
+                                        ? JSON.parse(image.scores.flaws)
+                                        : []}
+                                    {@const isActive =
+                                        currentFlaws.includes(flaw)}
+                                    <button
+                                        onclick={() => {
+                                            const newFlaws = isActive
+                                                ? currentFlaws.filter(
+                                                      (f: string) => f !== flaw,
+                                                  )
+                                                : [...currentFlaws, flaw];
+                                            updateScore({ flaws: newFlaws });
+                                        }}
+                                        class="px-2 py-0.5 border text-[9px] font-bold uppercase transition-none flex items-center gap-1
+                                        {isActive
+                                            ? 'bg-red-100 border-red-600 text-red-700 shadow-[inset_1px_1px_0_rgba(0,0,0,0.1)]'
+                                            : 'bg-white border-gray-400 text-gray-500 hover:border-black hover:text-black'}"
+                                    >
+                                        {#if isActive}<span
+                                                class="material-symbols-outlined text-[10px]"
+                                                >close</span
+                                            >{/if}
+                                        {flaw}
+                                    </button>
+                                {/each}
                             </div>
-                            <input
-                                type="range"
-                                min="1"
-                                max="10"
-                                step="1"
-                                value={image.scores.background_score || 5}
-                                onchange={(e) =>
-                                    updateScore({
-                                        background_score: parseInt(
-                                            e.currentTarget.value,
-                                        ),
-                                    })}
-                                class="range-retro"
-                            />
                         </div>
 
-                        <div class="border-t border-gray-400 mt-2 pt-4">
-                            <p
-                                class="text-[10px] font-bold uppercase mb-3 text-center tracking-widest italic text-gray-600"
+                        <hr class="border-t border-gray-400 my-1" />
+
+                        <!-- Curation Status -->
+                        <div class="flex flex-col gap-2">
+                            <div
+                                class="text-[10px] font-bold uppercase tracking-widest text-gray-600 mb-1"
                             >
-                                PRODUCTION_READY?
-                            </p>
-                            <div class="grid grid-cols-3 gap-2">
-                                <button
-                                    onclick={() =>
-                                        updateScore({ use_again: "yes" })}
-                                    class="win95-btn h-8 text-[9px] font-bold uppercase {image
-                                        .scores.use_again === 'yes'
-                                        ? 'bg-green-600 text-white'
-                                        : 'bg-white'}">Yes</button
-                                >
-                                <button
-                                    onclick={() =>
-                                        updateScore({ use_again: "no" })}
-                                    class="win95-btn h-8 text-[9px] font-bold uppercase {image
-                                        .scores.use_again === 'no'
-                                        ? 'bg-red-600 text-white'
-                                        : 'bg-white'}">No</button
-                                >
-                                <button
-                                    onclick={() =>
-                                        updateScore({ use_again: "test_more" })}
-                                    class="win95-btn h-8 text-[9px] font-bold uppercase {image
-                                        .scores.use_again === 'test_more'
-                                        ? 'bg-yellow-500 text-white'
-                                        : 'bg-white'}">Maybe</button
-                                >
+                                CURATION_ACTION
+                            </div>
+                            <div class="grid grid-cols-3 gap-1 h-8">
+                                {#each [{ id: "trash", label: "Trash", icon: "delete", color: "bg-red-600" }, { id: "keep", label: "Keep", icon: "save", color: "bg-blue-600" }, { id: "showcase", label: "Top 1%", icon: "diamond", color: "bg-win-magenta" }] as action}
+                                    {@const isSelected =
+                                        image?.scores?.curation_status ===
+                                        action.id}
+                                    <button
+                                        onclick={() =>
+                                            updateScore({
+                                                curation_status: action.id,
+                                            })}
+                                        class="flex items-center justify-center gap-1 border-2 text-[9px] font-bold uppercase transition-all
+                                        {isSelected
+                                            ? `${action.color} text-white border-black shadow-[inset_1px_1px_0_rgba(0,0,0,0.3)]`
+                                            : 'bg-gray-100 text-gray-500 border-white border-b-gray-400 border-r-gray-400 hover:bg-white hover:text-black'}"
+                                    >
+                                        <span
+                                            class="material-symbols-outlined text-[12px]"
+                                            >{action.icon}</span
+                                        >
+                                        {#if isSelected}{action.label}{/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
                     </div>

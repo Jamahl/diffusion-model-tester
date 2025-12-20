@@ -64,15 +64,19 @@
     async function fetchModels() {
         try {
             const res = await fetch("http://localhost:8000/api/models");
-            if (!res.ok) throw new Error("API Key missing");
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || "Failed to fetch models");
+            }
             const data = await res.json();
             if (data.models && data.models.length > 0) {
                 models = data.models;
             } else {
                 models = defaultModels;
             }
-        } catch (e) {
-            console.log("Using fallback models (API Key likely missing)");
+        } catch (e: any) {
+            console.error("Model fetch error:", e);
+            toasts.error(`Model Sync Failed: ${e.message}`);
             models = defaultModels;
         } finally {
             loadingModels = false;

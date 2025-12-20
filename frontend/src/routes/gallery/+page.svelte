@@ -12,6 +12,11 @@
         background_score: number | null;
         use_again: "yes" | "no" | "test_more" | null;
         is_rated: boolean;
+        // RLHF Fields
+        score_fidelity?: number;
+        score_alignment?: number;
+        score_aesthetics?: number;
+        curation_status?: "trash" | "keep" | "showcase";
     }
 
     let images = $state<Image[]>([]);
@@ -315,8 +320,91 @@
 
                                 <!-- Use Again -->
                                 <div
-                                    class="mt-auto pt-2 border-t border-gray-400"
+                                    class="mt-auto pt-2 border-t border-gray-400 space-y-3"
                                 >
+                                    <!-- RLHF Metrics (1-5) -->
+                                    <div class="grid grid-cols-3 gap-2">
+                                        {#each ["fidelity", "alignment", "aesthetics"] as metric}
+                                            <div class="flex flex-col gap-1">
+                                                <span
+                                                    class="text-[7px] font-bold uppercase text-gray-600 truncate"
+                                                    >{metric}</span
+                                                >
+                                                <input
+                                                    type="range"
+                                                    min="1"
+                                                    max="5"
+                                                    step="1"
+                                                    value={image[
+                                                        `score_${metric}`
+                                                    ] || 3}
+                                                    onchange={(e) =>
+                                                        updateScore(image.id, {
+                                                            [`score_${metric}`]:
+                                                                parseInt(
+                                                                    e
+                                                                        .currentTarget
+                                                                        .value,
+                                                                ),
+                                                        })}
+                                                    class="range-retro-small"
+                                                />
+                                            </div>
+                                        {/each}
+                                    </div>
+
+                                    <!-- Curation Status -->
+                                    <div class="flex gap-1 justify-center">
+                                        <button
+                                            onclick={() =>
+                                                updateScore(image.id, {
+                                                    curation_status: "trash",
+                                                })}
+                                            class="p-1 aspect-square flex items-center justify-center border border-white {image.curation_status ===
+                                            'trash'
+                                                ? 'bg-red-600 text-white'
+                                                : 'bg-[#c0c0c0] hover:bg-red-100'}"
+                                            title="Trash"
+                                        >
+                                            <span
+                                                class="material-symbols-outlined text-[14px]"
+                                                >delete</span
+                                            >
+                                        </button>
+                                        <button
+                                            onclick={() =>
+                                                updateScore(image.id, {
+                                                    curation_status: "keep",
+                                                })}
+                                            class="p-1 aspect-square flex items-center justify-center border border-white {image.curation_status ===
+                                            'keep'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-[#c0c0c0] hover:bg-blue-100'}"
+                                            title="Keep"
+                                        >
+                                            <span
+                                                class="material-symbols-outlined text-[14px]"
+                                                >save</span
+                                            >
+                                        </button>
+                                        <button
+                                            onclick={() =>
+                                                updateScore(image.id, {
+                                                    curation_status: "showcase",
+                                                })}
+                                            class="p-1 aspect-square flex items-center justify-center border border-white {image.curation_status ===
+                                            'showcase'
+                                                ? 'bg-yellow-400 text-white'
+                                                : 'bg-[#c0c0c0] hover:bg-yellow-100'}"
+                                            title="Showcase"
+                                        >
+                                            <span
+                                                class="material-symbols-outlined text-[14px]"
+                                                >star</span
+                                            >
+                                        </button>
+                                    </div>
+
                                     <div class="flex gap-1">
                                         <button
                                             onclick={() =>
