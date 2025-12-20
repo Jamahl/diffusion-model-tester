@@ -1,10 +1,19 @@
 """SinkIn AI API service for inference and upscaling."""
 import json
-import requests
-from typing import Optional, Dict, Any, Tuple
+import logging
 from pathlib import Path
+from typing import Optional, Dict, Any, Tuple
+
+import requests
 
 from config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+def _pretty(data: Dict[str, Any]) -> str:
+    """Nicely format dictionaries for console logs."""
+    return json.dumps(data, indent=2, sort_keys=True)
 
 
 class SinkInService:
@@ -39,6 +48,7 @@ class SinkInService:
         init_image_path: Optional[str] = None,
         image_strength: float = 0.75,
         controlnet: Optional[str] = None,
+        log_context: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         Call SinkIn /inference API.
@@ -85,6 +95,18 @@ class SinkInService:
         # Create payload copy without API key for logging
         payload_for_log = {k: v for k, v in payload.items() if k != "access_token"}
         
+        context = log_context or {}
+        logger.info(
+            "🛠️  Generating images | batch=%s job=%s model=%s scheduler=%s seed=%s num_images=%s",
+            context.get("batch_number"),
+            context.get("job_id"),
+            model_id,
+            scheduler,
+            seed,
+            num_images,
+        )
+        logger.debug("📦 Payload\n%s", _pretty(payload_for_log))
+
         try:
             response = requests.post(
                 f"{self.base_url}/inference",
@@ -94,8 +116,24 @@ class SinkInService:
             )
             response.raise_for_status()
             response_data = response.json()
+            logger.info(
+                "✨ SinkIn inference succeeded | batch=%s job=%s inf_id=%s credit=%s images=%s",
+                context.get("batch_number"),
+                context.get("job_id"),
+                response_data.get("inf_id"),
+                response_data.get("credit_cost"),
+                len(response_data.get("images", [])),
+            )
         except requests.RequestException as e:
             response_data = {"error_code": 1, "message": str(e)}
+            logger.error(
+                "💥 SinkIn inference failed | batch=%s job=%s model=%s error=%s\nPayload:\n%s",
+                context.get("batch_number"),
+                context.get("job_id"),
+                model_id,
+                str(e),
+                _pretty(payload_for_log),
+            )
         finally:
             # Close file if opened
             if files:

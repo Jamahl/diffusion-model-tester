@@ -1,5 +1,6 @@
 """Job processing routes for SinkIn inference."""
 import json
+import logging
 import os
 import uuid
 import requests
@@ -15,6 +16,7 @@ from services.sinkin import sinkin_service
 from config import get_settings
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+logger = logging.getLogger(__name__)
 
 
 def download_image(url: str, save_dir: Path, filename: str) -> str:
@@ -29,40 +31,55 @@ def download_image(url: str, save_dir: Path, filename: str) -> str:
             f.write(response.content)
         return str(file_path)
     except Exception as e:
-        print(f"Error downloading image: {e}")
+        logger.warning("🧊 Failed to download image %s | error=%s", url, str(e))
         return ""
 
 
 @router.post("/run", response_model=InferenceResult)
-async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
+def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
     """
     Process a single job from the queue by calling SinkIn /inference API.
     Stores generated images and their configs in the database.
     """
+    logger.info("📬 Received request to run job | job=%s", request.job_id)
     settings = get_settings()
     
     # Get the job
     job = db.query(Job).filter(Job.id == request.job_id).first()
     if not job:
+        logger.error("🛑 Job not found | job=%s", request.job_id)
         raise HTTPException(status_code=404, detail="Job not found")
     
     if job.status != JobStatus.queued:
+        logger.warning(
+            "⏸️ Job not queued | job=%s status=%s",
+            request.job_id,
+            job.status.value,
+        )
         raise HTTPException(status_code=400, detail=f"Job is not queued (status: {job.status.value})")
     
     # Get the associated run
     run = db.query(Run).filter(Run.id == job.run_id).first()
     if not run:
+        logger.error("❓ Run missing for job | job=%s run_id=%s", job.id, job.run_id)
         raise HTTPException(status_code=404, detail="Run not found")
     
     # Parse job config
     try:
         config = json.loads(job.config_json)
     except json.JSONDecodeError:
+        logger.error("⚠️ Invalid job config JSON | job=%s", job.id)
         raise HTTPException(status_code=400, detail="Invalid job config JSON")
     
     # Update job status to running
     job.status = JobStatus.running
     db.commit()
+    logger.info(
+        "🚀 Started job | job=%s batch=%s model=%s",
+        job.id,
+        run.batch_number,
+        run.model_id,
+    )
     
     # Get init image path if present
     init_image_path = None
@@ -71,9 +88,18 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
         asset = db.query(Asset).filter(Asset.id == job.init_image_asset_id).first()
         if asset:
             init_image_path = asset.file_path
+            logger.info(
+                "🖼️ Using init image | job=%s path=%s",
+                job.id,
+                init_image_path,
+            )
     
     # Call SinkIn API
     try:
+        log_context = {
+            "batch_number": run.batch_number,
+            "job_id": job.id,
+        }
         payload, response = sinkin_service.inference(
             model_id=run.model_id,
             prompt=run.prompt,
@@ -91,12 +117,17 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
             image_strength=config.get("image_strength", 0.75),
             controlnet=config.get("controlnet"),
             use_default_neg=config.get("use_default_neg", True),
+            log_context=log_context,
         )
         
         # Check for API error and handle fallback if img2img
         if response.get("error_code", 0) != 0:
             if init_image_path:
-                print(f"Img2Img failed, falling back to text2img for job {job.id}")
+                logger.warning(
+                    "🔁 Img2Img failed; retrying as text2img | job=%s error=%s",
+                    job.id,
+                    response.get("message"),
+                )
                 # Retry without init image
                 payload, response = sinkin_service.inference(
                     model_id=run.model_id,
@@ -111,8 +142,9 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
                     scheduler=config.get("scheduler", "DPMSolverMultistep"),
                     lora=config.get("lora"),
                     lora_scale=config.get("lora_scale", 0.75),
-                    init_image_path=None, # Fallback
+                    init_image_path=None,  # Fallback
                     use_default_neg=config.get("use_default_neg", True),
+                    log_context={**log_context, "fallback": True},
                 )
             
             # If still error (or not img2img)
@@ -121,6 +153,12 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
                 job.error_message = response.get("message", "Unknown API error")
                 job.completed_at = datetime.utcnow()
                 db.commit()
+                logger.error(
+                    "💀 Generation failed | job=%s batch=%s error=%s",
+                    job.id,
+                    run.batch_number,
+                    job.error_message,
+                )
                 return InferenceResult(
                     success=False,
                     error_message=job.error_message
@@ -172,11 +210,26 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
             db.add(image_config)
             
             saved_images.append(img_url)
+            logger.info(
+                "🖼️ Image saved | job=%s batch=%s index=%s/%s path=%s",
+                job.id,
+                run.batch_number,
+                i + 1,
+                len(image_urls),
+                file_path or "download_failed",
+            )
         
         # Update job status
         job.status = JobStatus.completed
         job.completed_at = datetime.utcnow()
         db.commit()
+        logger.info(
+            "✅ Job completed | job=%s batch=%s images=%s credit_cost=%s",
+            job.id,
+            run.batch_number,
+            len(saved_images),
+            credit_cost,
+        )
         
         return InferenceResult(
             success=True,
@@ -191,6 +244,7 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
         job.error_message = str(e)
         job.completed_at = datetime.utcnow()
         db.commit()
+        logger.error("🔐 Missing API key | job=%s", job.id)
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         # Unexpected error
@@ -198,6 +252,11 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
         job.error_message = str(e)
         job.completed_at = datetime.utcnow()
         db.commit()
+        logger.exception(
+            "🔥 Unexpected error during generation | job=%s batch=%s",
+            job.id,
+            run.batch_number,
+        )
         raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
 
 

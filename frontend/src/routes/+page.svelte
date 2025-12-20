@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
+	import { browser } from "$app/environment";
 	import { toasts } from "$lib/stores/toasts";
 
 	interface Run {
@@ -101,28 +102,16 @@
 		}
 	}
 
-	async function runNextJob(isAll = false) {
-		if (queuedJobs.length === 0) {
-			if (isAll) {
-				processingAll = false;
-				addLog("Queue empty. Stopping worker.");
-			}
-			return;
-		}
-		if (processingJob) return;
-
-		processingJob = true;
-		if (isAll) processingAll = true;
-
+	async function runJobCycle() {
 		try {
 			addLog("Fetching next job from stack...");
 			const nextRes = await fetch("http://localhost:8000/api/jobs/next");
+			if (!nextRes.ok) throw new Error("Failed to fetch next job");
 			const { job_id } = await nextRes.json();
 
 			if (!job_id) {
 				addLog("[WARN] No jobs found in active queue.");
-				processingAll = false;
-				return;
+				return false;
 			}
 
 			addLog(`Starting job ID: ${job_id}`);
@@ -132,21 +121,57 @@
 				body: JSON.stringify({ job_id }),
 			});
 
-			if (!res.ok) throw new Error("Failed to run job");
+			if (!res.ok) {
+				let message = "Failed to run job";
+				try {
+					const detail = await res.json();
+					message = detail.detail || message;
+				} catch (err) {
+					// ignore JSON parse errors
+				}
+				throw new Error(message);
+			}
 
 			addLog(`[SUCCESS] Job ${job_id} completed.`);
 			await Promise.all([fetchRuns(), fetchQueue()]);
-
-			if (isAll && queuedJobs.length > 0) {
-				processingJob = false;
-				setTimeout(() => runNextJob(true), 100);
-			}
+			return true;
 		} catch (e: any) {
 			addLog(`[ERROR] ${e.message}`);
 			toasts.error("Error running job: " + e.message);
-			processingAll = false;
+			return false;
+		}
+	}
+
+	async function runNextJob(isAll = false) {
+		if (processingJob || processingAll) return;
+
+		processingJob = true;
+		if (isAll) processingAll = true;
+
+		try {
+			await fetchQueue();
+			if (queuedJobs.length === 0) {
+				addLog("Queue empty. Stopping worker.");
+				return;
+			}
+
+			const initialSuccess = await runJobCycle();
+			if (!initialSuccess) return;
+
+			if (isAll) {
+				while (true) {
+					await fetchQueue();
+					if (queuedJobs.length === 0) {
+						addLog("Queue empty. Stopping worker.");
+						break;
+					}
+					const continued = await runJobCycle();
+					if (!continued) break;
+				}
+			}
 		} finally {
 			processingJob = false;
+			processingAll = false;
 		}
 	}
 
@@ -192,6 +217,19 @@
 		loading = true;
 		await Promise.all([fetchRuns(), fetchQueue()]);
 		loading = false;
+
+		if (browser) {
+			const params = new URLSearchParams(window.location.search);
+			const autorun = params.get("autorun");
+			if (autorun === "true") {
+				addLog("[AUTO] Autorun signal received. Starting queue.");
+				params.delete("autorun");
+				const query = params.toString();
+				const newUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+				window.history.replaceState({}, "", newUrl);
+				await runNextJob(true);
+			}
+		}
 
 		pollInterval = setInterval(() => {
 			fetchRuns();

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { browser } from "$app/environment";
     import { onMount } from "svelte";
     import { goto } from "$app/navigation";
     import { toasts } from "$lib/stores/toasts";
@@ -43,6 +44,7 @@
 
     // Queue State
     let queuedItems = $state<any[]>([]);
+    const QUEUE_STORAGE_KEY = "sinkinQueuedItems";
 
     const schedulerOptions = [
         "DPMSolverMultistep",
@@ -124,6 +126,38 @@
         return steps * scales * schedulers * (item.totalJobs || 1);
     }
 
+    function loadQueuedItems() {
+        if (!browser) return [];
+        try {
+            const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch (err) {
+            console.warn("Failed to parse saved queue", err);
+            return [];
+        }
+    }
+
+    function persistQueue(items: any[]) {
+        if (!browser) return;
+        const serialized = items.map(({ previewUrl: _ignore, ...rest }) => rest);
+        localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(serialized));
+    }
+
+    function clearPersistedQueue() {
+        if (!browser) return;
+        localStorage.removeItem(QUEUE_STORAGE_KEY);
+    }
+
+    function hydrateQueueFromStorage() {
+        const saved = loadQueuedItems();
+        if (saved.length > 0) {
+            queuedItems = saved;
+            toasts.info(
+                `Restored ${saved.length} buffered batch${saved.length > 1 ? "es" : ""}. Run them here or via the Dashboard.`,
+            );
+        }
+    }
+
     function addToQueue() {
         if (!prompt) {
             toasts.warning("Please enter a prompt");
@@ -155,12 +189,18 @@
         };
 
         queuedItems = [...queuedItems, item];
-        toasts.info(`Batch added to queue (${calculateJobCount(item)} jobs)`);
+        persistQueue(queuedItems);
+        toasts.info(
+            `Batch buffered (${calculateJobCount(
+                item,
+            )} jobs). Run from this page or process later on the Dashboard.`,
+        );
         name = "";
     }
 
     function removeFromQueue(id: string) {
         queuedItems = queuedItems.filter((item) => item.id !== id);
+        persistQueue(queuedItems);
         toasts.info("Batch removed from queue");
     }
 
@@ -213,7 +253,9 @@
             toasts.success(
                 `Experiment started with ${queuedItems.length} batches`,
             );
-            goto("/");
+            queuedItems = [];
+            clearPersistedQueue();
+            goto("/?autorun=true");
         } catch (e: any) {
             toasts.error(e.message || "Error creating batch experiment");
         } finally {
@@ -231,7 +273,10 @@
         }
     }
 
-    onMount(fetchModels);
+    onMount(() => {
+        fetchModels();
+        hydrateQueueFromStorage();
+    });
 </script>
 
 <div class="flex flex-col h-full overflow-hidden font-mono bg-[#d4d0c8]">
@@ -682,11 +727,16 @@
                         <div
                             class="flex-1 win95-inset bg-gray-50 flex flex-col p-2 overflow-hidden"
                         >
-                            <h3
-                                class="text-[10px] font-bold uppercase opacity-60 mb-2"
-                            >
-                                Queued_Operations [{queuedItems.length}]
-                            </h3>
+                            <div class="mb-2">
+                                <h3
+                                    class="text-[10px] font-bold uppercase opacity-60"
+                                >
+                                    Queued_Operations [{queuedItems.length}]
+                                </h3>
+                                <p class="text-[9px] text-gray-500 italic">
+                                    Buffer autosaves locally. Click "Run Experiment" here or head to the Dashboard to execute when ready.
+                                </p>
+                            </div>
                             <div
                                 class="flex-1 overflow-y-auto custom-scrollbar space-y-2"
                             >

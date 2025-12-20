@@ -1,5 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { afterNavigate } from "$app/navigation";
+    import { browser } from "$app/environment";
 
     type CurationStatus = "trash" | "keep" | "showcase" | null;
 
@@ -118,7 +120,20 @@
         return flaws;
     }
 
-    onMount(fetchData);
+    onMount(() => {
+        fetchData();
+        if (!browser) return;
+        const unsubscribe = afterNavigate(({ from }) => {
+            if (from) {
+                fetchData();
+            }
+        });
+        return () => {
+            if (typeof unsubscribe === "function") {
+                unsubscribe();
+            }
+        };
+    });
 </script>
 
 <div class="flex flex-col h-full overflow-hidden font-mono bg-[#d4d0c8]">
@@ -254,22 +269,32 @@
                                 >
                                 <td class="p-2">
                                     <a
-                                        href="/runs/{row.run_id}/review/{row.id}"
+                                        href={`/runs/${row.run_id}/review/${row.id}`}
                                         class="block"
                                         onmouseenter={() => (hoveredRow = row)}
                                         onmouseleave={() => (hoveredRow = null)}
                                         onmousemove={handleMouseMove}
                                     >
-                                        <div
-                                            class="w-10 h-10 border border-black shadow-sm group-hover:border-white transition-transform group-hover:scale-110"
-                                        >
-                                            <img
-                                                src={getImageUrl(
-                                                    row.image.file_path,
-                                                )}
-                                                alt="Result"
-                                                class="w-full h-full object-cover"
-                                            />
+                                        <div class="relative inline-block">
+                                            {#if row.image.upscale_url}
+                                                <span
+                                                    class="absolute -top-2 -right-2 bg-yellow-300 text-[8px] font-bold uppercase px-1 py-0.5 border border-black shadow-[1px_1px_0_#000] group-hover:text-black"
+                                                    title="Upscaled available"
+                                                >
+                                                    Upscaled
+                                                </span>
+                                            {/if}
+                                            <div
+                                                class="w-10 h-10 border border-black shadow-sm group-hover:border-white transition-transform group-hover:scale-110"
+                                            >
+                                                <img
+                                                    src={getImageUrl(
+                                                        row.image.file_path,
+                                                    )}
+                                                    alt="Result"
+                                                    class="w-full h-full object-cover"
+                                                />
+                                            </div>
                                         </div>
                                     </a>
                                 </td>
@@ -369,7 +394,7 @@
                                 </td>
                                 <td class="p-2 text-right">
                                     <a
-                                        href="/runs/{row.run_id}/review/{row.id}"
+                                        href={`/runs/${row.run_id}/review/${row.id}`}
                                         class="win95-btn px-2 py-0.5 text-[9px] font-bold uppercase no-underline text-black group-hover:bg-white group-hover:text-win-magenta"
                                     >
                                         Open

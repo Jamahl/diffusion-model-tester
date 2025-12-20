@@ -1,6 +1,8 @@
 """
 SinkIn Image Experimentation Web App - Backend API
 """
+import logging
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -16,6 +18,14 @@ from routes.analysis import router as analysis_router
 from services.sinkin import sinkin_service
 
 from config import get_settings
+
+
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
 
 
 @asynccontextmanager
