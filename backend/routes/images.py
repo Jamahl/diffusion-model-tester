@@ -47,11 +47,13 @@ async def list_images(
                 "inf_id": img.inf_id,
                 "created_at": img.created_at.isoformat(),
                 "overall_quality": img.overall_quality,
-                "anatomy_score": img.anatomy_score,
-                "use_again": img.use_again.value if img.use_again else None,
-                "prompt_adherence": img.prompt_adherence,
-                "background_score": img.background_score,
                 "is_rated": img.overall_quality is not None,
+                # RLHF + extended scoring context
+                "score_fidelity": img.score_fidelity,
+                "score_alignment": img.score_alignment,
+                "score_aesthetics": img.score_aesthetics,
+                "curation_status": img.curation_status,
+                "flaws": img.flaws,
             }
             for img in images
         ],
@@ -218,6 +220,19 @@ async def score_image(
     if request.is_failed is not None:
         image.is_failed = request.is_failed
     
+    # New RLHF Scoring
+    if request.score_fidelity is not None:
+        image.score_fidelity = request.score_fidelity
+    if request.score_alignment is not None:
+        image.score_alignment = request.score_alignment
+    if request.score_aesthetics is not None:
+        image.score_aesthetics = request.score_aesthetics
+    if request.flaws is not None:
+        # Store as JSON string if list, else string
+        image.flaws = json.dumps(request.flaws) if isinstance(request.flaws, list) else request.flaws
+    if request.curation_status is not None:
+        image.curation_status = request.curation_status
+    
     db.commit()
     
     return {
@@ -229,5 +244,11 @@ async def score_image(
             "use_again": image.use_again.value if image.use_again else None,
             "prompt_adherence": image.prompt_adherence,
             "background_score": image.background_score,
+            # New fields
+            "score_fidelity": image.score_fidelity,
+            "score_alignment": image.score_alignment,
+            "score_aesthetics": image.score_aesthetics,
+            "flaws": image.flaws,
+            "curation_status": image.curation_status,
         },
     }

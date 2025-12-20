@@ -2,28 +2,34 @@
     import { onMount } from "svelte";
     import { toasts } from "$lib/stores/toasts";
 
+    type CurationStatus = "trash" | "keep" | "showcase";
+    type RLHFField = "score_fidelity" | "score_alignment" | "score_aesthetics";
+
     interface Image {
         id: string;
         run_id: string;
         file_path: string | null;
         overall_quality: number | null;
-        anatomy_score: number | null;
-        prompt_adherence: number | null;
-        background_score: number | null;
-        use_again: "yes" | "no" | "test_more" | null;
         is_rated: boolean;
-        // RLHF Fields
-        score_fidelity?: number;
-        score_alignment?: number;
-        score_aesthetics?: number;
-        curation_status?: "trash" | "keep" | "showcase";
+        score_fidelity?: number | null;
+        score_alignment?: number | null;
+        score_aesthetics?: number | null;
+        curation_status?: CurationStatus | null;
+        flaws?: string | string[] | null;
     }
 
     let images = $state<Image[]>([]);
     let loading = $state(true);
     let total = $state(0);
     let offset = $state(0);
+    let flawDrafts = $state<Record<string, string>>({});
     const limit = 20;
+
+    const rlhfControls: { key: RLHFField; label: string; accent: string }[] = [
+        { key: "score_fidelity", label: "Fidelity", accent: "text-blue-700" },
+        { key: "score_alignment", label: "Alignment", accent: "text-win-purple" },
+        { key: "score_aesthetics", label: "Aesthetics", accent: "text-pink-600" },
+    ];
 
     async function fetchUnratedImages() {
         try {
@@ -34,12 +40,48 @@
             const data = await res.json();
             images = data.images;
             total = data.total;
+            flawDrafts = {};
         } catch (e) {
             console.error("Failed to fetch unrated images", e);
             toasts.error("Failed to load unrated images");
         } finally {
             loading = false;
         }
+    }
+
+    function formatFlawString(raw?: string | string[] | null): string {
+        if (!raw) return "";
+        if (Array.isArray(raw)) {
+            return raw.join(", ");
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                return parsed.join(", ");
+            }
+        } catch {
+            // Ignore JSON parse errors; treat as plain string
+        }
+        return raw;
+    }
+
+    function getFlawDraft(image: Image) {
+        return flawDrafts[image.id] ?? formatFlawString(image.flaws);
+    }
+
+    function handleFlawInput(imageId: string, value: string) {
+        flawDrafts = { ...flawDrafts, [imageId]: value };
+    }
+
+    function saveFlaws(image: Image) {
+        const raw = (flawDrafts[image.id] ?? formatFlawString(image.flaws)).trim();
+        const tags = raw
+            ? raw
+                  .split(",")
+                  .map((entry) => entry.trim())
+                  .filter(Boolean)
+            : [];
+        updateScore(image.id, { flaws: tags });
     }
 
     async function updateScore(imageId: string, payload: any) {
@@ -57,13 +99,28 @@
                 // Update local state
                 images = images.map((img) =>
                     img.id === imageId
-                        ? { ...img, ...data.scores, is_rated: true }
+                        ? {
+                              ...img,
+                              ...data.scores,
+                              is_rated:
+                                  data.scores.overall_quality != null
+                                      ? true
+                                      : img.is_rated,
+                          }
                         : img,
                 );
+                if (data.scores?.flaws !== undefined) {
+                    flawDrafts = {
+                        ...flawDrafts,
+                        [imageId]: formatFlawString(data.scores.flaws),
+                    };
+                }
                 // If it was the final rating (overall_quality set), we might want to hide it
                 if (payload.overall_quality) {
                     setTimeout(() => {
                         images = images.filter((img) => img.id !== imageId);
+                        const { [imageId]: _discard, ...rest } = flawDrafts;
+                        flawDrafts = rest;
                         total--;
                     }, 500);
                 }
@@ -213,14 +270,16 @@
 
                             <!-- Controls Right -->
                             <div
-                                class="w-1/2 flex flex-col gap-2 p-1 bg-[#d4d0c8] win95-inset overflow-y-auto scrollbar-hide"
+                                class="w-1/2 flex flex-col gap-3 p-1 bg-[#d4d0c8] win95-inset overflow-y-auto scrollbar-hide"
                             >
                                 <!-- Overall Quality 1-10 -->
-                                <div class="flex flex-col gap-1 mb-2">
-                                    <span
-                                        class="text-[8px] font-bold uppercase text-win-purple"
-                                        >Quality (1-10)</span
+                                <div class="flex flex-col gap-1">
+                                    <div
+                                        class="flex justify-between items-center text-[8px] font-bold uppercase text-win-purple"
                                     >
+                                        <span>Quality (1-10)</span>
+                                        <span class="text-black">{image.overall_quality || "-"}</span>
+                                    </div>
                                     <div class="flex flex-wrap gap-1">
                                         {#each Array(10) as _, i}
                                             <button
@@ -239,206 +298,106 @@
                                     </div>
                                 </div>
 
-                                <!-- Sliders -->
-                                <div class="flex flex-col gap-2">
-                                    <div class="flex flex-col gap-0.5">
-                                        <div
-                                            class="flex justify-between text-[8px] font-bold uppercase"
-                                        >
-                                            <span>Anatomy</span>
-                                            <span class="text-blue-700"
-                                                >{image.anatomy_score ||
-                                                    "-"}</span
-                                            >
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="10"
-                                            step="1"
-                                            value={image.anatomy_score || 5}
-                                            onchange={(e) =>
-                                                updateScore(image.id, {
-                                                    anatomy_score: parseInt(
-                                                        e.currentTarget.value,
-                                                    ),
-                                                })}
-                                            class="range-retro-small"
-                                        />
-                                    </div>
-                                    <div class="flex flex-col gap-0.5">
-                                        <div
-                                            class="flex justify-between text-[8px] font-bold uppercase"
-                                        >
-                                            <span>Prompt</span>
-                                            <span class="text-win-purple"
-                                                >{image.prompt_adherence ||
-                                                    "-"}</span
-                                            >
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="10"
-                                            step="1"
-                                            value={image.prompt_adherence || 5}
-                                            onchange={(e) =>
-                                                updateScore(image.id, {
-                                                    prompt_adherence: parseInt(
-                                                        e.currentTarget.value,
-                                                    ),
-                                                })}
-                                            class="range-retro-small"
-                                        />
-                                    </div>
-                                    <div class="flex flex-col gap-0.5">
-                                        <div
-                                            class="flex justify-between text-[8px] font-bold uppercase"
-                                        >
-                                            <span>Background</span>
-                                            <span class="text-pink-600"
-                                                >{image.background_score ||
-                                                    "-"}</span
-                                            >
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="10"
-                                            step="1"
-                                            value={image.background_score || 5}
-                                            onchange={(e) =>
-                                                updateScore(image.id, {
-                                                    background_score: parseInt(
-                                                        e.currentTarget.value,
-                                                    ),
-                                                })}
-                                            class="range-retro-small"
-                                        />
-                                    </div>
-                                </div>
-
-                                <!-- Use Again -->
+                                <!-- RLHF Vector -->
                                 <div
-                                    class="mt-auto pt-2 border-t border-gray-400 space-y-3"
+                                    class="border-t border-gray-400 pt-2 mt-1 space-y-2"
                                 >
-                                    <!-- RLHF Metrics (1-5) -->
-                                    <div class="grid grid-cols-3 gap-2">
-                                        {#each ["fidelity", "alignment", "aesthetics"] as metric}
+                                    <div class="text-[8px] font-bold uppercase text-gray-600">
+                                        RLHF Vector (1-5)
+                                    </div>
+                                    <div class="space-y-2">
+                                        {#each rlhfControls as control}
                                             <div class="flex flex-col gap-1">
-                                                <span
-                                                    class="text-[7px] font-bold uppercase text-gray-600 truncate"
-                                                    >{metric}</span
+                                                <div
+                                                    class="flex justify-between text-[8px] font-bold uppercase"
                                                 >
+                                                    <span class={control.accent}>
+                                                        {control.label}
+                                                    </span>
+                                                    <span class="text-black"
+                                                        >{image[control.key] || "-"}</span
+                                                    >
+                                                </div>
                                                 <input
                                                     type="range"
                                                     min="1"
                                                     max="5"
                                                     step="1"
-                                                    value={image[
-                                                        `score_${metric}`
-                                                    ] || 3}
+                                                    value={image[control.key] || 3}
                                                     onchange={(e) =>
                                                         updateScore(image.id, {
-                                                            [`score_${metric}`]:
-                                                                parseInt(
-                                                                    e
-                                                                        .currentTarget
-                                                                        .value,
-                                                                ),
+                                                            [control.key]: parseInt(
+                                                                e.currentTarget.value,
+                                                            ),
                                                         })}
                                                     class="range-retro-small"
                                                 />
                                             </div>
                                         {/each}
                                     </div>
+                                </div>
 
-                                    <!-- Curation Status -->
-                                    <div class="flex gap-1 justify-center">
-                                        <button
-                                            onclick={() =>
-                                                updateScore(image.id, {
-                                                    curation_status: "trash",
-                                                })}
-                                            class="p-1 aspect-square flex items-center justify-center border border-white {image.curation_status ===
-                                            'trash'
-                                                ? 'bg-red-600 text-white'
-                                                : 'bg-[#c0c0c0] hover:bg-red-100'}"
-                                            title="Trash"
+                                <!-- Curation + Flaws -->
+                                <div class="mt-auto space-y-2">
+                                    <div class="flex flex-col gap-1">
+                                        <span
+                                            class="text-[8px] font-bold uppercase text-gray-600"
+                                            >Curation</span
                                         >
-                                            <span
-                                                class="material-symbols-outlined text-[14px]"
-                                                >delete</span
-                                            >
-                                        </button>
-                                        <button
-                                            onclick={() =>
-                                                updateScore(image.id, {
-                                                    curation_status: "keep",
-                                                })}
-                                            class="p-1 aspect-square flex items-center justify-center border border-white {image.curation_status ===
-                                            'keep'
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-[#c0c0c0] hover:bg-blue-100'}"
-                                            title="Keep"
-                                        >
-                                            <span
-                                                class="material-symbols-outlined text-[14px]"
-                                                >save</span
-                                            >
-                                        </button>
-                                        <button
-                                            onclick={() =>
-                                                updateScore(image.id, {
-                                                    curation_status: "showcase",
-                                                })}
-                                            class="p-1 aspect-square flex items-center justify-center border border-white {image.curation_status ===
-                                            'showcase'
-                                                ? 'bg-yellow-400 text-white'
-                                                : 'bg-[#c0c0c0] hover:bg-yellow-100'}"
-                                            title="Showcase"
-                                        >
-                                            <span
-                                                class="material-symbols-outlined text-[14px]"
-                                                >star</span
-                                            >
-                                        </button>
+                                        <div class="flex gap-1 justify-center">
+                                            {#each [
+                                                { value: "trash", icon: "delete", color: "bg-red-600" },
+                                                { value: "keep", icon: "save", color: "bg-blue-600" },
+                                                {
+                                                    value: "showcase",
+                                                    icon: "star",
+                                                    color: "bg-yellow-400",
+                                                },
+                                            ] as action}
+                                                <button
+                                                    onclick={() =>
+                                                        updateScore(image.id, {
+                                                            curation_status: action.value,
+                                                        })}
+                                                    class="p-1 aspect-square flex items-center justify-center border border-white {image.curation_status ===
+                                                    action.value
+                                                        ? `${action.color} text-white`
+                                                        : 'bg-[#c0c0c0] hover:bg-white'}"
+                                                    title={action.value}
+                                                >
+                                                    <span
+                                                        class="material-symbols-outlined text-[14px]"
+                                                        >{action.icon}</span
+                                                    >
+                                                </button>
+                                            {/each}
+                                        </div>
                                     </div>
 
-                                    <div class="flex gap-1">
-                                        <button
-                                            onclick={() =>
-                                                updateScore(image.id, {
-                                                    use_again: "yes",
-                                                })}
-                                            class="flex-1 h-6 text-[8px] font-bold uppercase {image.use_again ===
-                                            'yes'
-                                                ? 'bg-green-600 text-white'
-                                                : 'bg-white text-black'}"
-                                            >YES</button
+                                    <div class="flex flex-col gap-1">
+                                        <span
+                                            class="text-[8px] font-bold uppercase text-gray-600"
+                                            >Flaw Tags (comma separated)</span
                                         >
-                                        <button
-                                            onclick={() =>
-                                                updateScore(image.id, {
-                                                    use_again: "test_more",
-                                                })}
-                                            class="flex-1 h-6 text-[8px] font-bold uppercase {image.use_again ===
-                                            'test_more'
-                                                ? 'bg-yellow-500 text-white'
-                                                : 'bg-white text-black'}"
-                                            >?</button
-                                        >
-                                        <button
-                                            onclick={() =>
-                                                updateScore(image.id, {
-                                                    use_again: "no",
-                                                })}
-                                            class="flex-1 h-6 text-[8px] font-bold uppercase {image.use_again ===
-                                            'no'
-                                                ? 'bg-red-600 text-white'
-                                                : 'bg-white text-black'}"
-                                            >NO</button
-                                        >
+                                        <div class="flex gap-1">
+                                            <input
+                                                type="text"
+                                                value={getFlawDraft(image)}
+                                                oninput={(e) =>
+                                                    handleFlawInput(
+                                                        image.id,
+                                                        e.currentTarget.value,
+                                                    )}
+                                                class="flex-1 win95-input h-7 px-2 text-[10px]"
+                                                placeholder="hands, eyes, background"
+                                            />
+                                            <button
+                                                onclick={() => saveFlaws(image)}
+                                                class="win95-btn px-2 text-[9px] font-bold uppercase"
+                                            >
+                                                Save
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

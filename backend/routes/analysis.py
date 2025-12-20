@@ -34,7 +34,8 @@ async def export_csv(db: Session = Depends(get_db)):
         "prompt", "negative_prompt", "steps", "scale", "width", 
         "height", "seed", "scheduler", "overall_quality", 
         "anatomy_score", "prompt_adherence", "background_score", 
-        "use_again", "image_id", "file_path", "upscale_url", "credit_cost"
+        "use_again", "image_id", "file_path", "upscale_url", "credit_cost",
+        "score_fidelity", "score_alignment", "score_aesthetics", "flaws", "curation_status"
     ]
     
     output = io.StringIO()
@@ -64,7 +65,12 @@ async def export_csv(db: Session = Depends(get_db)):
             "image_id": image.id,
             "file_path": image.file_path,
             "upscale_url": image.upscale_url,
-            "credit_cost": config.credit_cost if config else 0
+            "credit_cost": config.credit_cost if config else 0,
+            "score_fidelity": image.score_fidelity if image.score_fidelity is not None else "",
+            "score_alignment": image.score_alignment if image.score_alignment is not None else "",
+            "score_aesthetics": image.score_aesthetics if image.score_aesthetics is not None else "",
+            "flaws": image.flaws if image.flaws else "",
+            "curation_status": image.curation_status if image.curation_status else ""
         })
     
     response = StreamingResponse(
@@ -115,6 +121,11 @@ async def get_analysis_table(db: Session = Depends(get_db)):
                 "prompt_adherence": image.prompt_adherence,
                 "background_score": image.background_score,
                 "use_again": image.use_again.value if image.use_again else None,
+                "score_fidelity": image.score_fidelity,
+                "score_alignment": image.score_alignment,
+                "score_aesthetics": image.score_aesthetics,
+                "flaws": image.flaws,
+                "curation_status": image.curation_status
             },
             "image": {
                 "file_path": image.file_path,

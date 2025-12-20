@@ -1,6 +1,8 @@
 <script lang="ts">
     import { onMount } from "svelte";
 
+    type CurationStatus = "trash" | "keep" | "showcase" | null;
+
     interface Row {
         id: string;
         run_id: string;
@@ -20,10 +22,11 @@
         };
         scores: {
             overall_quality: number | null;
-            anatomy_score: number | null;
-            prompt_adherence: number | null;
-            background_score: number | null;
-            use_again: string | null;
+            score_fidelity: number | null;
+            score_alignment: number | null;
+            score_aesthetics: number | null;
+            curation_status: CurationStatus;
+            flaws: string | string[] | null;
         };
         image: {
             file_path: string | null;
@@ -99,6 +102,20 @@
         if (path.startsWith("http")) return path;
         const filename = path.split("/").pop();
         return `http://localhost:8000/images/${filename}`;
+    }
+
+    function formatFlaws(flaws: string | string[] | null): string {
+        if (!flaws) return "-";
+        if (Array.isArray(flaws)) return flaws.join(", ");
+        try {
+            const parsed = JSON.parse(flaws);
+            if (Array.isArray(parsed)) {
+                return parsed.join(", ");
+            }
+        } catch {
+            // treat as plain string
+        }
+        return flaws;
     }
 
     onMount(fetchData);
@@ -214,10 +231,13 @@
                                     : ""}
                             </th>
                             <th class="p-2 border-r border-gray-400 text-center"
-                                >A/P/B</th
+                                >RLHF (F/A/Ae)</th
                             >
                             <th class="p-2 border-r border-gray-400 text-center"
-                                >Usage</th
+                                >Curation</th
+                            >
+                            <th class="p-2 border-r border-gray-400"
+                                >Flaws</th
                             >
                             <th class="p-2 border-r border-gray-400">Prompt</th>
                             <th class="p-2 text-right">Actions</th>
@@ -303,43 +323,42 @@
                                 >
                                     <span
                                         class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.anatomy_score || "-"}</span
+                                        >{row.scores.score_fidelity || "-"}</span
                                     >
                                     <span class="opacity-30">/</span>
                                     <span
                                         class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.prompt_adherence ||
+                                        >{row.scores.score_alignment ||
                                             "-"}</span
                                     >
                                     <span class="opacity-30">/</span>
                                     <span
                                         class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.background_score ||
+                                        >{row.scores.score_aesthetics ||
                                             "-"}</span
                                     >
                                 </td>
                                 <td class="p-2 text-center">
-                                    {#if row.scores.use_again === "yes"}
+                                    {#if row.scores.curation_status}
                                         <span
-                                            class="text-[9px] font-bold text-green-700 bg-green-100 px-1 border border-green-700 group-hover:bg-green-400 group-hover:text-black group-hover:border-black"
-                                            >YES</span
-                                        >
-                                    {:else if row.scores.use_again === "no"}
-                                        <span
-                                            class="text-[9px] font-bold text-red-700 bg-red-100 px-1 border border-red-700 group-hover:bg-white group-hover:text-red-700 group-hover:border-white"
-                                            >NO</span
-                                        >
-                                    {:else if row.scores.use_again === "test_more"}
-                                        <span
-                                            class="text-[9px] font-bold text-yellow-700 bg-yellow-100 px-1 border border-yellow-700 group-hover:bg-yellow-400 group-hover:text-black group-hover:border-black"
-                                            >MAYBE</span
+                                            class="text-[9px] font-bold uppercase px-1 border group-hover:border-white group-hover:text-black {row.scores
+                                                .curation_status === 'trash'
+                                                ? 'bg-red-600 text-white'
+                                                : row.scores.curation_status ===
+                                                      'keep'
+                                                  ? 'bg-blue-600 text-white'
+                                                  : 'bg-yellow-400 text-black'}"
+                                            >{row.scores.curation_status}</span
                                         >
                                     {:else}
-                                        <span
-                                            class="opacity-20 group-hover:opacity-40"
-                                            >-</span
-                                        >
+                                        <span class="opacity-20">-</span>
                                     {/if}
+                                </td>
+                                <td class="p-2">
+                                    <span
+                                        class="text-[10px] uppercase tracking-tight opacity-60 group-hover:opacity-100"
+                                        >{formatFlaws(row.scores.flaws)}</span
+                                    >
                                 </td>
                                 <td class="p-2 max-w-xs">
                                     <p

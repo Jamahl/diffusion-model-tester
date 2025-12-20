@@ -63,6 +63,13 @@ class Image(Base):
     inf_id = Column(String(100), nullable=True)  # SinkIn inference ID
     batch_index = Column(Integer, nullable=True)  # Index in the batch (0-N)
     is_failed = Column(Boolean, default=False, nullable=False)
+    
+    # New Scoring System (RLHF-Style)
+    score_fidelity = Column(Integer, nullable=True)     # Visual Fidelity (Tech score)
+    score_alignment = Column(Integer, nullable=True)    # Prompt Alignment (accuracy)
+    score_aesthetics = Column(Integer, nullable=True)   # Aesthetics (Vibe score)
+    flaws = Column(Text, nullable=True)                 # JSON list of specific flaws tags
+    curation_status = Column(String(20), nullable=True) # "trash", "keep", "showcase"
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Scoring fields

@@ -1,7 +1,23 @@
 """Application configuration and settings."""
-import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+from pathlib import Path
+from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _resolve_env_file() -> str:
+    """Locate the most appropriate .env file (repo root fallback -> backend/.env)."""
+    backend_dir = Path(__file__).resolve().parent
+    repo_root = backend_dir.parent
+    
+    candidates = [
+        repo_root / ".env",      # preferred: root-level .env (earlier behavior)
+        backend_dir / ".env",    # fallback: backend/.env (current file)
+    ]
+    
+    chosen: Optional[Path] = next((path for path in candidates if path.exists()), None)
+    return str(chosen or backend_dir / ".env")
 
 
 class Settings(BaseSettings):
@@ -12,15 +28,14 @@ class Settings(BaseSettings):
     sinkin_base_url: str = "https://sinkin.ai/api"
     
     # Storage paths
-    # Storage paths
-    images_dir: str = os.path.join(os.path.dirname(__file__), "storage", "images")
-    assets_dir: str = os.path.join(os.path.dirname(__file__), "storage", "assets")
+    images_dir: str = str(Path(__file__).resolve().parent / "storage" / "images")
+    assets_dir: str = str(Path(__file__).resolve().parent / "storage" / "assets")
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_resolve_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
-        case_sensitive=False  # This allows matching SINKIN_API_KEY to sinkin_api_key
+        case_sensitive=False,  # Allows matching SINKIN_API_KEY to sinkin_api_key
     )
 
 

@@ -76,6 +76,13 @@ class ScoreRequest(BaseModel):
     prompt_adherence: Optional[int] = Field(None, ge=1, le=10)
     background_score: Optional[int] = Field(None, ge=1, le=10)
     is_failed: Optional[bool] = Field(None, description="Mark as failed generation")
+    
+    # New Scoring Fields
+    score_fidelity: Optional[int] = Field(None, ge=1, le=5)
+    score_alignment: Optional[int] = Field(None, ge=1, le=5)
+    score_aesthetics: Optional[int] = Field(None, ge=1, le=5)
+    flaws: Optional[List[str]] = Field(None, description="List of flaws")
+    curation_status: Optional[str] = Field(None, pattern="^(trash|keep|showcase)$")
 
 
 # ============ Response Schemas ============
@@ -99,6 +106,12 @@ class ImageResponse(BaseModel):
     overall_quality: Optional[int] = None
     is_rated: bool = False
     is_failed: bool = False
+    
+    score_fidelity: Optional[int] = None
+    score_alignment: Optional[int] = None
+    score_aesthetics: Optional[int] = None
+    flaws: Optional[str] = None
+    curation_status: Optional[str] = None
 
     class Config:
         from_attributes = True
