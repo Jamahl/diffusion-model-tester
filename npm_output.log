@@ -1,0 +1,31 @@
+
+> frontend@0.0.1 dev
+> vite dev
+
+
+  VITE v7.3.0  ready in 1076 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+11:39:03 AM [vite-plugin-svelte] src/routes/+page.svelte:271:10 Buttons and links should either contain text or have an `aria-label`, `aria-labelledby` or `title` attribute
+https://svelte.dev/e/a11y_consider_explicit_label
+
+🌼   daisyUI 4.12.24
+├─ ✔︎ 2 themes added		https://daisyui.com/docs/themes
+╰─ ❤︎ Support daisyUI project:	https://opencollective.com/daisyui
+
+
+🌼   daisyUI 4.12.24
+├─ ✔︎ 2 themes added		https://daisyui.com/docs/themes
+╰─ ❤︎ Support daisyUI project:	https://opencollective.com/daisyui
+
+11:41:35 AM [vite] (ssr) page reload src/lib/components/Navbar.svelte
+11:42:31 AM [vite] (ssr) page reload src/routes/runs/[id]/+page.svelte
+11:43:01 AM [vite] (ssr) page reload src/routes/runs/[id]/review/[image_id]/+page.svelte
+11:43:40 AM [vite] (ssr) page reload src/routes/runs/[id]/review/[image_id]/+page.svelte
+11:43:59 AM [vite] (ssr) page reload src/routes/runs/[id]/review/[image_id]/+page.svelte
+11:44:12 AM [vite] (ssr) page reload src/routes/runs/[id]/review/[image_id]/+page.svelte
+11:44:54 AM [vite] (ssr) page reload src/routes/runs/[id]/review/[image_id]/+page.svelte
+11:45:54 AM [vite] (ssr) page reload src/routes/runs/[id]/review/[image_id]/+page.svelte
+11:46:09 AM [vite] (ssr) page reload src/routes/runs/[id]/review/[image_id]/+page.svelte
+11:46:27 AM [vite] (ssr) page reload src/routes/runs/[id]/+page.svelte

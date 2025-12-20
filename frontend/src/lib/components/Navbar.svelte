@@ -27,7 +27,7 @@
             href="/"
             class="btn btn-ghost text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
         >
-            SinkIn Lab
+            jam master user
         </a>
     </div>
     <div class="flex-none">
