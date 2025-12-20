@@ -1,0 +1,19 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/*.db
+backend/.env
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/.env
+
+# Storage
+backend/storage/
+frontend/static/storage/
+
+# OS
+.DS_Store

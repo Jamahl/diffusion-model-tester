@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+
+# Database
+*.db
+
+# Storage (generated images and uploads)
+storage/
+
+# Environment
+.env
