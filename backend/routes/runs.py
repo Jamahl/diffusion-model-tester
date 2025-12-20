@@ -49,6 +49,9 @@ class RunCreateRequest(BaseModel):
     # How many jobs to create
     total_jobs: int = Field(1, ge=1, le=100, description="Number of jobs to create")
 
+    # System settings
+    use_default_neg: bool = Field(True, description="Append the default negative prompt")
+
 
 # ============ Helper Functions ============
 
@@ -84,6 +87,7 @@ def create_job_configs(request: RunCreateRequest) -> List[dict]:
                 "num_images": request.num_images,
                 "seed": request.seed,
                 "image_strength": request.image_strength,
+                "use_default_neg": request.use_default_neg,
             }
             
             if request.controlnet:
@@ -201,6 +205,9 @@ async def list_runs(
             Job.run_id == run.id,
             Job.status == JobStatus.queued
         ).count()
+        
+        # Calculate total cost from Configs
+        total_cost = db.query(func.sum(Config.credit_cost)).join(Image).filter(Image.run_id == run.id).scalar() or 0.0
         
         results.append({
             "id": run.id,

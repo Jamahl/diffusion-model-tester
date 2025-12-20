@@ -5,7 +5,8 @@
 
     interface Model {
         id: string;
-        title: string;
+        name: string;
+        cover_img?: string;
     }
 
     // Form State
@@ -13,12 +14,16 @@
     let prompt = $state("");
     let negativePrompt = $state("");
     let useDefaultNeg = $state(true);
-    let modelId = $state("yBG2r9O"); // Default to majicMIX realistic
+    let modelId = $state("yBG2r9O");
     let width = $state(512);
     let height = $state(768);
     let numImages = $state(4);
     let totalJobs = $state(1);
     let seed = $state(-1);
+
+    // Models from API
+    let models = $state<Model[]>([]);
+    let selectedModel = $derived(models.find((m) => m.id === modelId));
 
     // Multi-select states
     let stepsInput = $state("30");
@@ -32,8 +37,6 @@
     let uploadingFile = $state(false);
     let previewUrl = $state<string | null>(null);
 
-    // Models from API
-    let models = $state<Model[]>([]);
     let loadingModels = $state(true);
     let submitting = $state(false);
     let executionProgress = $state({ current: 0, total: 0 });
@@ -50,12 +53,12 @@
         "KLMS",
     ];
 
-    const defaultModels = [
-        { id: "yBG2r9O", title: "majicMIX realistic" },
-        { id: "mGYMaD5", title: "AbsoluteReality" },
-        { id: "4zdwGOB", title: "DreamShaper" },
-        { id: "r2La2w2", title: "Realistic Vision" },
-        { id: "K6KkkKl", title: "Deliberate" },
+    const defaultModels: Model[] = [
+        { id: "yBG2r9O", name: "majicMIX realistic" },
+        { id: "mGYMaD5", name: "AbsoluteReality" },
+        { id: "4zdwGOB", name: "DreamShaper" },
+        { id: "r2La2w2", name: "Realistic Vision" },
+        { id: "K6KkkKl", name: "Deliberate" },
     ];
 
     async function fetchModels() {
@@ -81,10 +84,7 @@
         const file = target.files?.[0];
         if (!file) return;
 
-        // Preview
         previewUrl = URL.createObjectURL(file);
-
-        // Upload
         uploadingFile = true;
         const formData = new FormData();
         formData.append("file", file);
@@ -102,6 +102,15 @@
         } finally {
             uploadingFile = false;
         }
+    }
+
+    function removeAsset() {
+        initImageAssetId = null;
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            previewUrl = null;
+        }
+        toasts.info("Asset removed");
     }
 
     function calculateJobCount(item: any) {
@@ -131,28 +140,24 @@
             numImages,
             totalJobs,
             seed,
+            useDefaultNeg,
             initImageAssetId,
             previewUrl,
             imageStrength,
             controlnet,
             modelTitle:
-                models.find((m: Model) => m.id === modelId)?.title || modelId,
+                models.find((m: Model) => m.id === modelId)?.name || modelId,
+            coverImg: models.find((m: Model) => m.id === modelId)?.cover_img,
         };
 
         queuedItems = [...queuedItems, item];
         toasts.info(`Batch added to queue (${calculateJobCount(item)} jobs)`);
-        // Keep form values as requested, but maybe clear the name if it was specific
         name = "";
     }
 
     function removeFromQueue(id: string) {
         queuedItems = queuedItems.filter((item) => item.id !== id);
         toasts.info("Batch removed from queue");
-    }
-
-    function handleSubmit(e: Event) {
-        e.preventDefault();
-        addToQueue();
     }
 
     async function runExperiment() {
@@ -184,6 +189,7 @@
                     num_images: item.numImages,
                     total_jobs: item.totalJobs,
                     seed: item.seed,
+                    use_default_neg: item.useDefaultNeg,
                     init_image_asset_id: item.initImageAssetId,
                     image_strength: item.imageStrength,
                     controlnet:
@@ -224,636 +230,541 @@
     onMount(fetchModels);
 </script>
 
-<div class="max-w-4xl mx-auto pb-20">
-    <div class="flex items-center justify-between mb-8">
-        <div>
-            <h1 class="text-3xl font-bold font-display">New Experiment</h1>
-            <p class="text-base-content/60">
-                Define parameters for your generation batch.
-            </p>
+<div class="flex flex-col h-full overflow-hidden font-mono bg-[#d4d0c8]">
+    <!-- Window Header -->
+    <div class="win95-title-bar shrink-0">
+        <span class="flex items-center gap-2"
+            ><span class="material-symbols-outlined text-[16px]">add_box</span> C:\SYSTEM\NEW_EXPERIMENT.EXE</span
+        >
+        <div class="flex gap-1">
+            <button
+                class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+                >_</button
+            >
+            <button
+                class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+                >□</button
+            >
+            <button
+                class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+                >x</button
+            >
         </div>
     </div>
 
-    <form onsubmit={handleSubmit} class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Main Config -->
-        <div class="md:col-span-2 space-y-6">
-            <div class="card bg-base-200 shadow-xl">
-                <div class="card-body gap-4">
-                    <div class="form-control w-full">
-                        <label class="label">
-                            <span
-                                class="label-text font-semibold flex items-center gap-2"
-                            >
-                                Prompt
-                                <div
-                                    class="tooltip tooltip-right"
-                                    data-tip="The core text description of what you want to see. Be descriptive and specific."
-                                >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        class="w-4 h-4 stroke-current opacity-50"
-                                        ><path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        ></path></svg
-                                    >
-                                </div>
-                            </span>
-                        </label>
-                        <textarea
-                            bind:value={prompt}
-                            class="textarea textarea-bordered h-32 text-lg"
-                            placeholder="An interior photo of a futuristic laboratory, soft lighting, 8k..."
-                            required
-                        ></textarea>
+    <div class="flex-1 overflow-y-auto p-6 custom-scrollbar bg-checkered">
+        <div class="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6">
+            <!-- Left Panel: Configuration Form -->
+            <div class="flex-1 flex flex-col gap-6">
+                <!-- Experiment Identity -->
+                <div class="win95-window p-1">
+                    <div
+                        class="bg-blue-800 text-white px-2 py-0.5 text-[10px] font-bold uppercase flex justify-between items-center mb-4"
+                    >
+                        <span>EXPERIMENT_IDENTITY</span>
+                        <span class="material-symbols-outlined text-[16px]"
+                            >fingerprint</span
+                        >
                     </div>
-
-                    <div class="form-control w-full">
-                        <label class="label">
-                            <span
-                                class="label-text font-semibold flex items-center gap-2"
+                    <div class="p-4 space-y-5">
+                        <div class="flex flex-col gap-1">
+                            <label
+                                class="text-[10px] font-bold uppercase text-gray-700"
+                                >Experiment Name (Optional)</label
                             >
-                                Negative Prompt
-                                <div
-                                    class="tooltip tooltip-right"
-                                    data-tip="Describe what to exclude from the image (e.g., 'blurry, low quality')."
+                            <input
+                                bind:value={name}
+                                type="text"
+                                class="win95-input h-8 px-2"
+                                placeholder="e.g., Portrait_Study_01"
+                            />
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <div
+                                class="flex justify-between items-center text-[10px] font-bold uppercase text-gray-700"
+                            >
+                                <span>Core Prompt Cluster</span>
+                                <span class="text-win-purple italic"
+                                    >REQUIRED*</span
                                 >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        class="w-4 h-4 stroke-current opacity-50"
-                                        ><path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        ></path></svg
-                                    >
-                                </div>
-                            </span>
-                        </label>
+                            </div>
+                            <textarea
+                                bind:value={prompt}
+                                class="win95-inset w-full h-32 p-3 text-sm bg-white font-mono leading-relaxed"
+                                placeholder="An interior photo of a futuristic laboratory, soft lighting, 8k..."
+                            ></textarea>
+                        </div>
+                        <div
+                            class="flex justify-between items-center text-[10px] font-bold uppercase text-gray-700"
+                        >
+                            <label>Negative Prompt Null-Set</label>
+                            <label
+                                class="flex items-center gap-1 cursor-pointer hover:text-win-purple"
+                            >
+                                <input
+                                    type="checkbox"
+                                    bind:checked={useDefaultNeg}
+                                    class="accent-win-purple"
+                                />
+                                <span>Append System Default</span>
+                            </label>
+                        </div>
                         <textarea
                             bind:value={negativePrompt}
-                            class="textarea textarea-bordered h-24 text-sm"
+                            class="win95-inset w-full h-20 p-2 text-xs bg-white/80 font-mono italic"
                             placeholder="blurry, distorted, low quality..."
                         ></textarea>
                     </div>
+                </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="form-control">
-                            <label class="label">
-                                <span
-                                    class="label-text font-semibold flex items-center gap-2"
-                                >
-                                    Model
-                                    <div
-                                        class="tooltip tooltip-top"
-                                        data-tip="The underlying AI model. Different models are trained on different styles (Photorealistic, Anime, etc.)."
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            class="w-4 h-4 stroke-current opacity-50"
-                                            ><path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            ></path></svg
-                                        >
-                                    </div>
-                                </span>
-                            </label>
-                            <select
-                                bind:value={modelId}
-                                class="select select-bordered"
-                                disabled={loadingModels}
+                <!-- Technical Parameters -->
+                <div class="win95-window p-1">
+                    <div
+                        class="bg-win-purple text-white px-2 py-0.5 text-[10px] font-bold uppercase flex justify-between items-center mb-4"
+                    >
+                        <span>TECHNICAL_PARAMS.DLL</span>
+                        <span class="material-symbols-outlined text-[16px]"
+                            >settings_input_component</span
+                        >
+                    </div>
+                    <div class="p-4 space-y-6">
+                        <!-- Top Row: Model Selection (Full Width to avoid overlap) -->
+                        <div class="flex flex-col gap-2">
+                            <label
+                                class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                >Inference Engine (Model)</label
                             >
-                                {#if loadingModels}
-                                    <option>Loading models...</option>
-                                {:else}
-                                    {#each models as model}
-                                        <option value={model.id}
-                                            >{model.title}</option
-                                        >
-                                    {/each}
-                                {/if}
-                            </select>
-                        </div>
-                        <div class="form-control">
-                            <label class="label">
-                                <span
-                                    class="label-text font-semibold flex items-center gap-2"
-                                >
-                                    Seed
-                                    <div
-                                        class="tooltip tooltip-top"
-                                        data-tip="Starting point for generation. -1 is random. Use a fixed number to reproduce the exact same image."
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <div class="flex-1 flex flex-col gap-2 min-w-0">
+                                    <select
+                                        bind:value={modelId}
+                                        class="win95-input h-10 px-1 text-xs w-full"
                                     >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            class="w-4 h-4 stroke-current opacity-50"
-                                            ><path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            ></path></svg
+                                        {#if loadingModels}
+                                            <option>LOADING_DATA...</option>
+                                        {:else}
+                                            {#each models as model}
+                                                <option value={model.id}
+                                                    >{model.name}</option
+                                                >
+                                            {/each}
+                                        {/if}
+                                    </select>
+                                    <div
+                                        class="win95-inset bg-white p-2 min-h-[40px] flex items-center"
+                                    >
+                                        <span
+                                            class="text-[9px] font-bold text-win-purple uppercase"
+                                            >ID: {modelId}</span
                                         >
                                     </div>
-                                </span>
-                            </label>
-                            <input
-                                bind:value={seed}
-                                type="number"
-                                class="input input-bordered font-mono"
-                            />
+                                </div>
+
+                                <!-- Model Cover Preview -->
+                                <div
+                                    class="w-full sm:w-32 flex flex-col shrink-0"
+                                >
+                                    <div
+                                        class="win95-window p-0.5 bg-[#d4d0c8]"
+                                    >
+                                        <div
+                                            class="bg-blue-900 px-1.5 py-0.5 flex justify-between items-center mb-0.5"
+                                        >
+                                            <span
+                                                class="text-[8px] text-white font-bold uppercase truncate"
+                                                >PREVIEW.BMP</span
+                                            >
+                                            <div
+                                                class="w-2 h-2 bg-[#c0c0c0] border border-white border-b-black border-r-black"
+                                            ></div>
+                                        </div>
+                                        <div
+                                            class="w-full h-32 sm:h-44 win95-inset bg-[#808080] flex items-center justify-center overflow-hidden relative group"
+                                        >
+                                            {#if selectedModel?.cover_img}
+                                                <img
+                                                    src={selectedModel.cover_img}
+                                                    alt={selectedModel.name}
+                                                    class="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                                />
+                                                <div
+                                                    class="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                ></div>
+                                            {:else}
+                                                <div
+                                                    class="flex flex-col items-center justify-center text-[#c0c0c0] p-2 text-center"
+                                                >
+                                                    <span
+                                                        class="material-symbols-outlined text-2xl opacity-50"
+                                                        >image</span
+                                                    >
+                                                    <span
+                                                        class="text-[7px] uppercase mt-1 font-bold"
+                                                        >NO_SYSTEM_ASSET</span
+                                                    >
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Grid: Numerical Parameters -->
+                        <div
+                            class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-gray-300/50"
+                        >
+                            <div class="space-y-4">
+                                <div class="flex flex-col gap-1">
+                                    <label
+                                        class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                        >Resolution (WxH)</label
+                                    >
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <input
+                                            bind:value={width}
+                                            type="number"
+                                            step="8"
+                                            class="win95-input h-8 px-2 text-xs"
+                                        />
+                                        <input
+                                            bind:value={height}
+                                            type="number"
+                                            step="8"
+                                            class="win95-input h-8 px-2 text-xs"
+                                        />
+                                    </div>
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <label
+                                        class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                        >Images per Engine Call</label
+                                    >
+                                    <div class="flex items-center gap-4">
+                                        <input
+                                            bind:value={numImages}
+                                            type="range"
+                                            min="1"
+                                            max="4"
+                                            class="flex-1 accent-win-magenta"
+                                        />
+                                        <span
+                                            class="win95-inset bg-white px-2 py-0.5 font-pixel text-lg text-win-magenta"
+                                            >{numImages}</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-4">
+                                <div class="flex flex-col gap-1">
+                                    <label
+                                        class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                        >Seed Initialization</label
+                                    >
+                                    <input
+                                        bind:value={seed}
+                                        type="number"
+                                        class="win95-input h-8 px-2 font-mono text-xs"
+                                    />
+                                    <span
+                                        class="text-[8px] text-gray-500 italic mt-1"
+                                        >(-1 FOR_RANDOM_DISTRIBUTION)</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Matrix Testing -->
+                <div class="win95-window p-1">
+                    <div
+                        class="bg-teal-700 text-white px-2 py-0.5 text-[10px] font-bold uppercase flex justify-between items-center mb-4"
+                    >
+                        <span>COMBINATORIAL_MATRIX_CONFIG</span>
+                        <span class="material-symbols-outlined text-[16px]"
+                            >grid_on</span
+                        >
+                    </div>
+                    <div class="p-4 space-y-6">
+                        <div class="grid grid-cols-2 gap-8">
+                            <div class="flex flex-col gap-1">
+                                <label
+                                    class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                    >Steps Stack</label
+                                >
+                                <input
+                                    bind:value={stepsInput}
+                                    type="text"
+                                    class="win95-input h-10 px-2 font-mono text-sm"
+                                    placeholder="20, 30, 40"
+                                />
+                                <span class="text-[8px] text-gray-500 italic"
+                                    >COMMA_SEPARATED_LIST</span
+                                >
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label
+                                    class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                    >CFG_Scale Array</label
+                                >
+                                <input
+                                    bind:value={scaleInput}
+                                    type="text"
+                                    class="win95-input h-10 px-2 font-mono text-sm"
+                                    placeholder="7, 9, 12"
+                                />
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <label
+                                class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                >Active Schedulers</label
+                            >
+                            <div class="flex flex-wrap gap-2">
+                                {#each schedulerOptions as s}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleScheduler(s)}
+                                        class="h-8 px-3 text-[9px] font-bold uppercase transition-none {selectedSchedulers.includes(
+                                            s,
+                                        )
+                                            ? 'win95-btn bg-win-magenta text-white border-white border-b-black border-r-black'
+                                            : 'win95-btn bg-[#c0c0c0] text-black hover:bg-white'}"
+                                    >
+                                        {s}
+                                    </button>
+                                {/each}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Base Image / Img2Img Section -->
-            <div class="card bg-base-200 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title text-sm uppercase opacity-50 mb-4">
-                        Base Image (img2img)
-                    </h2>
-                    <div class="flex flex-col md:flex-row gap-6">
-                        <div class="flex-1">
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text"
-                                        >Select or drop image</span
-                                    >
-                                    {#if initImageAssetId}
-                                        <span class="badge badge-success"
-                                            >Uploaded</span
-                                        >
-                                    {/if}
-                                </label>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onchange={handleFileUpload}
-                                    class="file-input file-input-bordered w-full"
-                                    disabled={uploadingFile}
-                                />
-                                {#if uploadingFile}
-                                    <progress
-                                        class="progress progress-primary w-full mt-2"
-                                    ></progress>
-                                {/if}
-                            </div>
-
-                            {#if initImageAssetId}
-                                <div class="grid grid-cols-2 gap-4 mt-6">
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span
-                                                class="label-text text-xs flex items-center gap-2"
-                                            >
-                                                Strength
-                                                <div
-                                                    class="tooltip tooltip-top"
-                                                    data-tip="How much to change the base image. 0.0 is no change, 1.0 is completely new image."
-                                                >
-                                                    <svg
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        class="w-3 h-3 stroke-current opacity-50"
-                                                        ><path
-                                                            stroke-linecap="round"
-                                                            stroke-linejoin="round"
-                                                            stroke-width="2"
-                                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                                        ></path></svg
-                                                    >
-                                                </div>
-                                            </span>
-                                            <span class="badge badge-sm"
-                                                >{imageStrength}</span
-                                            >
-                                        </label>
-                                        <input
-                                            bind:value={imageStrength}
-                                            type="range"
-                                            min="0"
-                                            max="1"
-                                            step="0.05"
-                                            class="range range-xs"
-                                        />
-                                    </div>
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span
-                                                class="label-text text-xs flex items-center gap-2"
-                                            >
-                                                ControlNet
-                                                <div
-                                                    class="tooltip tooltip-top"
-                                                    data-tip="Adds structural constraints (like edges or poses) to guide the generation using the base image."
-                                                >
-                                                    <svg
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        class="w-3 h-3 stroke-current opacity-50"
-                                                        ><path
-                                                            stroke-linecap="round"
-                                                            stroke-linejoin="round"
-                                                            stroke-width="2"
-                                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                                        ></path></svg
-                                                    >
-                                                </div>
-                                            </span>
-                                        </label>
-                                        <select
-                                            bind:value={controlnet}
-                                            class="select select-sm select-bordered"
-                                        >
-                                            <option value="none"
-                                                >None (Standard Img2Img)</option
-                                            >
-                                            <option value="canny">Canny</option>
-                                            <option value="depth">Depth</option>
-                                            <option value="openpose"
-                                                >OpenPose</option
-                                            >
-                                        </select>
-                                    </div>
+            <!-- Right Panel: Queue & Assets -->
+            <div class="w-full lg:w-[400px] flex flex-col gap-6">
+                <!-- Base Image Asset -->
+                <div class="win95-window p-1">
+                    <div
+                        class="bg-gray-700 text-white px-2 py-0.5 text-[10px] font-bold uppercase flex justify-between items-center mb-4"
+                    >
+                        <span>ASSET_INJECTION (IMG2IMG)</span>
+                        <span class="material-symbols-outlined text-[16px]"
+                            >image_search</span
+                        >
+                    </div>
+                    <div class="p-4 space-y-5">
+                        <div class="flex flex-col gap-2">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onchange={handleFileUpload}
+                                class="text-[10px] font-bold underline cursor-pointer"
+                            />
+                            {#if uploadingFile}
+                                <div class="bg-gray-200 h-1 overflow-hidden">
+                                    <div
+                                        class="bg-blue-800 h-full w-1/2 animate-pulse"
+                                    ></div>
                                 </div>
                             {/if}
                         </div>
 
                         {#if previewUrl}
                             <div
-                                class="w-full md:w-32 aspect-square rounded-lg overflow-hidden bg-base-300 border border-white/10 shrink-0"
+                                class="win95-inset bg-black/5 p-1 flex justify-center relative group"
                             >
                                 <img
                                     src={previewUrl}
                                     alt="Preview"
-                                    class="w-full h-full object-cover"
+                                    class="max-w-full h-32 object-contain"
                                 />
+                                <button
+                                    onclick={removeAsset}
+                                    class="absolute top-1 right-1 bg-red-600 text-white p-1 hover:bg-red-700 shadow-[1px_1px_0_0_black] flex items-center justify-center"
+                                    title="Remove Asset"
+                                >
+                                    <span
+                                        class="material-symbols-outlined text-[16px]"
+                                        >close</span
+                                    >
+                                </button>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="flex flex-col gap-1">
+                                    <div
+                                        class="flex justify-between items-center text-[10px] font-bold"
+                                    >
+                                        <span>INFLUENCE_STRENGTH</span>
+                                        <span
+                                            class="font-pixel text-win-magenta text-sm"
+                                            >{imageStrength}</span
+                                        >
+                                    </div>
+                                    <input
+                                        bind:value={imageStrength}
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        class="accent-win-magenta"
+                                    />
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <label
+                                        class="text-[10px] font-bold uppercase"
+                                        >ControlNet_Module</label
+                                    >
+                                    <select
+                                        bind:value={controlnet}
+                                        class="win95-input h-8 px-1 text-xs"
+                                    >
+                                        <option value="none"
+                                            >NONE (STD_IMG2IMG)</option
+                                        >
+                                        <option value="canny">CANNY</option>
+                                        <option value="depth">DEPTH</option>
+                                        <option value="openpose"
+                                            >OPENPOSE</option
+                                        >
+                                    </select>
+                                </div>
                             </div>
                         {/if}
                     </div>
                 </div>
-            </div>
 
-            <div class="card bg-base-200 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title text-sm uppercase opacity-50 mb-2">
-                        Combination Settings
-                    </h2>
-                    <div class="grid grid-cols-2 gap-6">
-                        <div class="form-control">
-                            <label class="label">
-                                <span
-                                    class="label-text font-semibold flex items-center gap-2"
-                                >
-                                    Steps
-                                    <div
-                                        class="tooltip tooltip-top"
-                                        data-tip="Number of refinement iterations. More steps (30-50) increase quality but take longer to generate. Enter multiple values separated by commas for batch testing."
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            class="w-4 h-4 stroke-current opacity-50"
-                                            ><path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            ></path></svg
-                                        >
-                                    </div>
-                                </span>
-                                <span class="label-text-alt opacity-50"
-                                    >CSV allowed</span
-                                >
-                            </label>
-                            <input
-                                bind:value={stepsInput}
-                                type="text"
-                                class="input input-bordered"
-                                placeholder="20, 30, 40"
-                            />
-                        </div>
-                        <div class="form-control">
-                            <label class="label">
-                                <span
-                                    class="label-text font-semibold flex items-center gap-2"
-                                >
-                                    CFG Scale
-                                    <div
-                                        class="tooltip tooltip-top"
-                                        data-tip="Classifier Free Guidance. Higher values (7-12) force the model to follow the prompt more strictly. Enter multiple values separated by commas for batch testing."
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            class="w-4 h-4 stroke-current opacity-50"
-                                            ><path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            ></path></svg
-                                        >
-                                    </div>
-                                </span>
-                                <span class="label-text-alt opacity-50"
-                                    >CSV allowed</span
-                                >
-                            </label>
-                            <input
-                                bind:value={scaleInput}
-                                type="text"
-                                class="input input-bordered"
-                                placeholder="7, 9, 12"
-                            />
-                        </div>
-                    </div>
-
-                    <div class="form-control mt-4">
-                        <label class="label">
-                            <span
-                                class="label-text font-semibold flex items-center gap-2"
-                            >
-                                Schedulers
-                                <div
-                                    class="tooltip tooltip-top"
-                                    data-tip="The algorithm used to denoise the image. Different schedulers produce subtle styling variations. Select multiple to test across different algorithms."
-                                >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        class="w-4 h-4 stroke-current opacity-50"
-                                        ><path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        ></path></svg
-                                    >
-                                </div>
-                            </span>
-                        </label>
-                        <div class="flex flex-wrap gap-2">
-                            {#each schedulerOptions as s}
-                                <button
-                                    type="button"
-                                    onclick={() => toggleScheduler(s)}
-                                    class="btn btn-sm {selectedSchedulers.includes(
-                                        s,
-                                    )
-                                        ? 'btn-primary'
-                                        : 'btn-outline opacity-50'}"
-                                >
-                                    {s}
-                                </button>
-                            {/each}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sidebar Controls -->
-        <div class="space-y-6">
-            <div class="card bg-base-200 shadow-xl">
-                <div class="card-body gap-4">
-                    <h2 class="card-title text-sm uppercase opacity-50">
-                        Image Settings
-                    </h2>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="form-control">
-                            <label class="label">
-                                <span
-                                    class="label-text text-xs flex items-center gap-2"
-                                >
-                                    Width
-                                    <div
-                                        class="tooltip tooltip-top"
-                                        data-tip="Width of the generated image. Must be a multiple of 8."
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            class="w-3 h-3 stroke-current opacity-50"
-                                            ><path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            ></path></svg
-                                        >
-                                    </div>
-                                </span>
-                            </label>
-                            <input
-                                bind:value={width}
-                                type="number"
-                                step="8"
-                                class="input input-sm input-bordered"
-                            />
-                        </div>
-                        <div class="form-control">
-                            <label class="label">
-                                <span
-                                    class="label-text text-xs flex items-center gap-2"
-                                >
-                                    Height
-                                    <div
-                                        class="tooltip tooltip-top"
-                                        data-tip="Height of the generated image. Must be a multiple of 8."
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            class="w-3 h-3 stroke-current opacity-50"
-                                            ><path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                            ></path></svg
-                                        >
-                                    </div>
-                                </span>
-                            </label>
-                            <input
-                                bind:value={height}
-                                type="number"
-                                step="8"
-                                class="input input-sm input-bordered"
-                            />
-                        </div>
-                    </div>
-
-                    <div class="form-control">
-                        <label class="label">
-                            <span
-                                class="label-text font-semibold text-xs flex items-center gap-2"
-                            >
-                                Images per Call
-                                <div
-                                    class="tooltip tooltip-top"
-                                    data-tip="Number of images to generate in a single batch (max 4)."
-                                >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        class="w-3 h-3 stroke-current opacity-50"
-                                        ><path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        ></path></svg
-                                    >
-                                </div>
-                            </span>
-                            <span class="badge badge-sm">{numImages}</span>
-                        </label>
-                        <input
-                            bind:value={numImages}
-                            type="range"
-                            min="1"
-                            max="4"
-                            class="range range-xs range-primary"
-                        />
-                    </div>
-
-                    <div class="form-control">
-                        <label class="label">
-                            <span
-                                class="label-text font-semibold text-xs flex items-center gap-2"
-                            >
-                                Total Parallel Jobs
-                                <div
-                                    class="tooltip tooltip-top"
-                                    data-tip="How many separate batches to run in this experiment. All combinations of Steps, CFG, and Schedulers will be multiplied by this."
-                                >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        class="w-3 h-3 stroke-current opacity-50"
-                                        ><path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        ></path></svg
-                                    >
-                                </div>
-                            </span>
-                            <span class="badge badge-sm badge-secondary"
-                                >{totalJobs}</span
-                            >
-                        </label>
-                        <input
-                            bind:value={totalJobs}
-                            type="number"
-                            min="1"
-                            max="100"
-                            class="input input-bordered"
-                        />
-                    </div>
-
-                    <div class="divider"></div>
-
-                    <button
-                        type="button"
-                        onclick={addToQueue}
-                        class="btn btn-primary w-full"
-                        disabled={submitting || !prompt}
+                <!-- Final Payload Control -->
+                <div class="win95-window grow flex flex-col p-1">
+                    <div
+                        class="bg-black text-white px-2 py-0.5 text-[10px] font-bold uppercase flex justify-between items-center mb-4"
                     >
-                        Add to Queue
-                    </button>
+                        <span>EXECUTION_BUFFER</span>
+                        <span class="material-symbols-outlined text-[16px]"
+                            >queue_play_next</span
+                        >
+                    </div>
 
-                    {#if queuedItems.length > 0}
-                        <div class="mt-4 space-y-3">
-                            <div
-                                class="text-xs uppercase font-bold opacity-50 px-1"
+                    <div class="p-4 flex flex-col gap-5 flex-1">
+                        <div class="flex flex-col gap-1">
+                            <label
+                                class="text-[10px] font-bold uppercase text-gray-700 underline"
+                                >Batch Run Count</label
                             >
-                                Queued Batches ({queuedItems.length})
-                            </div>
+                            <input
+                                bind:value={totalJobs}
+                                type="number"
+                                min="1"
+                                max="100"
+                                class="win95-input h-10 px-2 font-pixel text-xl text-blue-700"
+                            />
+                            <span class="text-[8px] text-gray-500 italic"
+                                >TOTAL_REPEAT_CYCLES</span
+                            >
+                        </div>
+
+                        <button
+                            type="button"
+                            onclick={addToQueue}
+                            class="win95-btn h-12 w-full bg-[#c0c0c0] text-black font-bold uppercase text-xs flex items-center justify-center gap-2 hover:bg-white active:bg-gray-400"
+                            disabled={submitting || !prompt}
+                        >
+                            <span class="material-symbols-outlined text-[20px]"
+                                >add_circle</span
+                            > Add To Buffer
+                        </button>
+
+                        <div
+                            class="flex-1 win95-inset bg-gray-50 flex flex-col p-2 overflow-hidden"
+                        >
+                            <h3
+                                class="text-[10px] font-bold uppercase opacity-60 mb-2"
+                            >
+                                Queued_Operations [{queuedItems.length}]
+                            </h3>
                             <div
-                                class="max-h-60 overflow-y-auto space-y-2 pr-1"
+                                class="flex-1 overflow-y-auto custom-scrollbar space-y-2"
                             >
                                 {#each queuedItems as item (item.id)}
                                     <div
-                                        class="bg-base-300 rounded-lg p-3 text-xs relative group border border-white/5"
+                                        class="bg-white border border-gray-300 p-2 text-[9px] flex gap-2 items-start"
                                     >
+                                        {#if item.coverImg}
+                                            <div
+                                                class="w-10 h-14 border border-white border-b-black border-r-black bg-[#808080] shrink-0 overflow-hidden"
+                                            >
+                                                <img
+                                                    src={item.coverImg}
+                                                    alt=""
+                                                    class="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                        {/if}
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-bold truncate">
+                                                {item.name || "UNNAMED_BATCH"}
+                                            </div>
+                                            <div class="opacity-60 truncate">
+                                                P: "{item.prompt}"
+                                            </div>
+                                            <div
+                                                class="text-[8px] text-blue-800 font-bold mt-1"
+                                            >
+                                                EST_JOBS: {calculateJobCount(
+                                                    item,
+                                                )}
+                                            </div>
+                                        </div>
                                         <button
                                             onclick={() =>
                                                 removeFromQueue(item.id)}
-                                            class="absolute top-2 right-2 btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 transition-opacity"
+                                            class="text-red-700 hover:bg-red-50 p-1"
                                         >
-                                            ✕
-                                        </button>
-                                        <div class="font-bold truncate pr-6">
-                                            {item.prompt}
-                                        </div>
-                                        <div class="opacity-60 mt-1 flex gap-2">
-                                            <span>{item.modelTitle}</span>
-                                            <span>•</span>
-                                            <span class="text-primary"
-                                                >{calculateJobCount(item)} jobs</span
+                                            <span
+                                                class="material-symbols-outlined text-[16px]"
+                                                >delete</span
                                             >
-                                        </div>
+                                        </button>
                                     </div>
                                 {/each}
-                            </div>
-
-                            <div class="divider"></div>
-
-                            <button
-                                type="button"
-                                onclick={runExperiment}
-                                class="btn btn-secondary w-full"
-                                disabled={submitting}
-                            >
-                                {#if submitting}
-                                    <span class="loading loading-spinner"
-                                    ></span>
-                                    Running {executionProgress.current}/{executionProgress.total}...
-                                {:else}
-                                    Start Full Experiment
+                                {#if queuedItems.length === 0}
+                                    <div
+                                        class="flex-1 flex flex-col items-center justify-center opacity-20 py-8"
+                                    >
+                                        <span
+                                            class="material-symbols-outlined text-4xl"
+                                            >inventory_2</span
+                                        >
+                                        <span
+                                            class="text-[10px] uppercase font-bold mt-2"
+                                            >Buffer_Empty</span
+                                        >
+                                    </div>
                                 {/if}
-                            </button>
-
-                            {#if submitting}
-                                <progress
-                                    class="progress progress-secondary w-full"
-                                    value={executionProgress.current}
-                                    max={executionProgress.total}
-                                ></progress>
-                            {/if}
+                            </div>
                         </div>
-                    {/if}
+
+                        <button
+                            type="button"
+                            onclick={runExperiment}
+                            class="win95-btn h-14 w-full bg-blue-800 text-white font-bold uppercase text-sm flex items-center justify-center gap-3 active:bg-blue-900 border-white"
+                            disabled={submitting || queuedItems.length === 0}
+                        >
+                            {#if submitting}
+                                <span class="loading loading-spinner h-5 w-5"
+                                ></span>
+                                UPLOADING [{executionProgress.current}/{executionProgress.total}]
+                            {:else}
+                                <span
+                                    class="material-symbols-outlined text-[24px]"
+                                    >rocket_launch</span
+                                > Initiate Experiment
+                            {/if}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </form>
+    </div>
 </div>

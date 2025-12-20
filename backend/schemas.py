@@ -75,6 +75,7 @@ class ScoreRequest(BaseModel):
     use_again: Optional[str] = Field(None, pattern="^(yes|no|test_more)$")
     prompt_adherence: Optional[int] = Field(None, ge=1, le=10)
     background_score: Optional[int] = Field(None, ge=1, le=10)
+    is_failed: Optional[bool] = Field(None, description="Mark as failed generation")
 
 
 # ============ Response Schemas ============
@@ -97,6 +98,7 @@ class ImageResponse(BaseModel):
     inf_id: Optional[str] = None
     overall_quality: Optional[int] = None
     is_rated: bool = False
+    is_failed: bool = False
 
     class Config:
         from_attributes = True

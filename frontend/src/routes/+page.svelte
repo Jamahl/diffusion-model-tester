@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
 	import { toasts } from "$lib/stores/toasts";
 
 	interface Run {
@@ -29,7 +29,36 @@
 	let queuedJobs = $state<Job[]>([]);
 	let loading = $state(true);
 	let processingJob = $state(false);
+	let processingAll = $state(false);
 	let error = $state<string | null>(null);
+	let logs = $state<string[]>([
+		"[OK] System v1.2.0-PATCH initialized.",
+		"[OK] DB connection stable.",
+		"[INFO] SinkIn Worker ready.",
+	]);
+	let pollInterval: any;
+
+	function addLog(msg: string) {
+		const time = new Date().toLocaleTimeString([], {
+			hour12: false,
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+		});
+		logs = [...logs.slice(-50), `[${time}] ${msg}`];
+	}
+
+	// Computed Stats
+	const totalImages = $derived(
+		runs.reduce((acc, r) => acc + r.total_images, 0),
+	);
+	const successfulBatches = $derived(
+		runs.filter((r) => r.total_images > 0).length,
+	);
+	const totalCost = $derived(runs.reduce((acc, r) => acc + r.total_cost, 0));
+	const unratedTotal = $derived(
+		runs.reduce((acc, r) => acc + r.unrated_count, 0),
+	);
 
 	async function fetchRuns() {
 		try {
@@ -54,23 +83,31 @@
 		}
 	}
 
-	async function runNextJob() {
-		if (queuedJobs.length === 0 || processingJob) return;
+	async function runNextJob(isAll = false) {
+		if (queuedJobs.length === 0) {
+			if (isAll) {
+				processingAll = false;
+				addLog("Queue empty. Stopping worker.");
+			}
+			return;
+		}
+		if (processingJob) return;
 
 		processingJob = true;
-		const nextJob = queuedJobs[queuedJobs.length - 1]; // list_jobs is desc, so last is oldest? wait.
-		// Actually list_jobs is desc, so oldest is at the end.
-		// Better to use /api/jobs/next which sorts by asc
+		if (isAll) processingAll = true;
 
 		try {
+			addLog("Fetching next job from stack...");
 			const nextRes = await fetch("http://localhost:8000/api/jobs/next");
 			const { job_id } = await nextRes.json();
 
 			if (!job_id) {
-				alert("No jobs in queue");
+				addLog("[WARN] No jobs found in active queue.");
+				processingAll = false;
 				return;
 			}
 
+			addLog(`Starting job ID: ${job_id}`);
 			const res = await fetch("http://localhost:8000/api/jobs/run", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -79,11 +116,17 @@
 
 			if (!res.ok) throw new Error("Failed to run job");
 
-			toasts.success(`Job completed successfully`);
-			// Refresh
+			addLog(`[SUCCESS] Job ${job_id} completed.`);
 			await Promise.all([fetchRuns(), fetchQueue()]);
+
+			if (isAll && queuedJobs.length > 0) {
+				processingJob = false;
+				setTimeout(() => runNextJob(true), 100);
+			}
 		} catch (e: any) {
+			addLog(`[ERROR] ${e.message}`);
 			toasts.error("Error running job: " + e.message);
+			processingAll = false;
 		} finally {
 			processingJob = false;
 		}
@@ -105,10 +148,6 @@
 		}
 	}
 
-	function formatDate(dateStr: string) {
-		return new Date(dateStr).toLocaleString();
-	}
-
 	async function cancelJob(jobId: number) {
 		try {
 			const res = await fetch(`http://localhost:8000/api/jobs/${jobId}`, {
@@ -122,349 +161,555 @@
 		}
 	}
 
+	function formatDate(dateStr: string) {
+		const date = new Date(dateStr);
+		return (
+			date.toLocaleDateString() +
+			" " +
+			date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+		);
+	}
+
 	onMount(async () => {
 		loading = true;
 		await Promise.all([fetchRuns(), fetchQueue()]);
 		loading = false;
 
-		// Poll for updates
-		const interval = setInterval(() => {
+		pollInterval = setInterval(() => {
 			fetchRuns();
 			fetchQueue();
 		}, 5000);
-		return () => clearInterval(interval);
+	});
+
+	onDestroy(() => {
+		if (pollInterval) clearInterval(pollInterval);
 	});
 </script>
 
-<div class="flex flex-col gap-8">
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-3xl font-bold font-display italic tracking-tight">
-				Experiment Dashboard
-			</h1>
-			<p class="text-base-content/60">
-				Monitor and review your generative AI batches.
-			</p>
-		</div>
-		<div class="flex gap-3">
-			<a
-				href="http://localhost:8000/api/analysis/csv"
-				class="btn btn-outline"
-				download
+<div class="flex h-full overflow-hidden font-mono bg-[#d4d0c8]">
+	<!-- Main View -->
+	<div
+		class="flex-1 flex flex-col h-full overflow-hidden border-r-2 border-white"
+	>
+		<!-- Window Header -->
+		<div class="win95-title-bar shrink-0">
+			<span class="flex items-center gap-2"
+				><span class="material-symbols-outlined text-[16px]"
+					>terminal</span
+				> C:\EXPERIMENTS\DASHBOARD.EXE</span
 			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke-width="1.5"
-					stroke="currentColor"
-					class="w-5 h-5"
+			<div class="flex gap-1">
+				<button
+					class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+					>_</button
 				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-					/>
-				</svg>
-				Export CSV
-			</a>
-			<a href="/create" class="btn btn-primary">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke-width="1.5"
-					stroke="currentColor"
-					class="w-5 h-5"
+				<button
+					class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+					>□</button
 				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M12 4.5v15m7.5-7.5h-15"
-					/>
-				</svg>
-				New Experiment
-			</a>
+				<button
+					class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+					>x</button
+				>
+			</div>
 		</div>
-	</div>
 
-	{#if queuedJobs.length > 0 || processingJob}
-		<div
-			class="card bg-secondary/5 border border-secondary/20 shadow-xl overflow-hidden"
-		>
-			<div class="card-body p-6">
-				<div class="flex items-center justify-between mb-4">
-					<div class="flex items-center gap-3">
-						<div
-							class="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center text-secondary"
+		<!-- Scrollable Area -->
+		<div class="flex-1 overflow-y-auto p-6 custom-scrollbar">
+			<div class="max-w-[1200px] mx-auto flex flex-col gap-6">
+				<!-- Header section -->
+				<div
+					class="flex flex-wrap justify-between items-end gap-4 border-b-2 border-gray-400 pb-4 shadow-[0_1px_0_#fff]"
+				>
+					<div class="flex flex-col gap-1">
+						<h1
+							class="text-black text-4xl font-pixel tracking-[0.1em] uppercase drop-shadow-[2px_2px_0_rgba(255,255,255,1)] leading-none"
 						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke-width="1.5"
-								stroke="currentColor"
-								class="w-6 h-6"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
-								/>
-							</svg>
-						</div>
-						<div>
-							<h2 class="text-xl font-bold text-secondary">
-								Active Queue
-							</h2>
-							<p
-								class="text-xs opacity-60 uppercase tracking-widest font-semibold"
-							>
-								{queuedJobs.length} Jobs Remaining
-							</p>
-						</div>
+							Experiment Dashboard
+						</h1>
+						<p
+							class="text-win-purple text-sm font-bold tracking-wide italic mt-1"
+						>
+							&gt;_ Monitoring generation history & active
+							sequences
+						</p>
 					</div>
-					<div class="flex gap-2">
-						<button
-							onclick={cancelAll}
-							class="btn btn-ghost btn-sm text-error border-error/20 hover:bg-error/10"
-							disabled={processingJob}
+					<div class="flex gap-3">
+						<a
+							href="/analysis"
+							class="flex items-center gap-2 h-9 px-4 win95-btn text-xs font-bold uppercase hover:bg-white transition-none no-underline text-black"
 						>
-							Cancel All
-						</button>
-						<button
-							onclick={runNextJob}
-							class="btn btn-secondary btn-sm px-6"
-							disabled={processingJob}
+							<span class="material-symbols-outlined text-[16px]"
+								>analytics</span
+							> Analysis
+						</a>
+						<a
+							href="http://localhost:8000/api/analysis/csv"
+							class="flex items-center gap-2 h-9 px-4 win95-btn text-xs font-bold uppercase hover:bg-white transition-none no-underline text-black"
+							download
 						>
-							{#if processingJob}
-								<span class="loading loading-spinner loading-xs"
-								></span>
-								Processing...
-							{:else}
-								Run Next
-							{/if}
-						</button>
+							<span class="material-symbols-outlined text-[16px]"
+								>save_alt</span
+							> Export CSV
+						</a>
 					</div>
 				</div>
 
+				<!-- Stats Grid -->
 				<div
-					class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
+					class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
 				>
-					{#each queuedJobs.slice(0, 6) as job: Job (job.id)}
+					<div
+						class="flex flex-col gap-1 p-1 win95-inset bg-white shadow-retro-flat cursor-default"
+					>
 						<div
-							class="bg-base-200/50 rounded-lg p-3 border border-white/5 flex flex-col justify-between"
+							class="bg-blue-800 text-white px-2 py-1 text-[10px] font-bold uppercase flex justify-between items-center"
 						>
-							<div>
-								<div
-									class="flex items-center justify-between mb-1"
+							<span class="tracking-wider">Total Images</span>
+							<span class="material-symbols-outlined text-[14px]"
+								>image</span
+							>
+						</div>
+						<div class="p-3 text-center">
+							<p class="text-black font-pixel text-4xl">
+								{totalImages.toLocaleString()}
+							</p>
+						</div>
+					</div>
+					<div
+						class="flex flex-col gap-1 p-1 win95-inset bg-white shadow-retro-flat cursor-default"
+					>
+						<div
+							class="bg-purple-700 text-white px-2 py-1 text-[10px] font-bold uppercase flex justify-between items-center"
+						>
+							<span class="tracking-wider">Total Batches</span>
+							<span class="material-symbols-outlined text-[14px]"
+								>checklist</span
+							>
+						</div>
+						<div class="p-3 text-center">
+							<p class="text-black font-pixel text-4xl">
+								{successfulBatches}
+							</p>
+						</div>
+					</div>
+					<div
+						class="flex flex-col gap-1 p-1 win95-inset bg-white shadow-retro-flat cursor-default"
+					>
+						<div
+							class="bg-pink-600 text-white px-2 py-1 text-[10px] font-bold uppercase flex justify-between items-center"
+						>
+							<span class="tracking-wider">Unrated</span>
+							<span class="material-symbols-outlined text-[14px]"
+								>pending_actions</span
+							>
+						</div>
+						<div class="p-3 text-center">
+							<p class="text-black font-pixel text-4xl">
+								{unratedTotal}
+							</p>
+						</div>
+					</div>
+					<div
+						class="flex flex-col gap-1 p-1 win95-inset bg-white shadow-retro-flat cursor-default"
+					>
+						<div
+							class="bg-teal-700 text-white px-2 py-1 text-[10px] font-bold uppercase flex justify-between items-center"
+						>
+							<span class="tracking-wider">Credit Cost</span>
+							<span class="material-symbols-outlined text-[14px]"
+								>payments</span
+							>
+						</div>
+						<div class="p-3 text-center">
+							<p class="text-black font-pixel text-4xl">
+								{totalCost.toFixed(1)}
+							</p>
+						</div>
+					</div>
+				</div>
+
+				<!-- Batches Table -->
+				<div
+					class="flex flex-col gap-2 border-2 border-white border-b-[#404040] border-r-[#404040] p-4 bg-[#d4d0c8] shadow-[2px_2px_0_0_rgba(0,0,0,0.2)]"
+				>
+					<div class="flex items-center justify-between pb-2">
+						<h2
+							class="text-xl font-bold text-black uppercase font-pixel flex items-center gap-2"
+						>
+							<span
+								class="w-3 h-3 bg-win-magenta inline-block border border-black shadow-[1px_1px_0_0_#000]"
+							></span> Recent Batches
+						</h2>
+					</div>
+
+					<div
+						class="w-full overflow-x-auto bg-white win95-inset custom-scrollbar"
+					>
+						<table class="w-full text-left border-collapse">
+							<thead>
+								<tr
+									class="bg-gray-200 text-black text-[10px] uppercase font-bold border-b-2 border-black"
 								>
-									<span
-										class="text-[10px] font-bold opacity-40 uppercase"
-										>Job #{job.id}</span
+									<th
+										class="p-3 border-r border-gray-400 tracking-wider"
+										>Batch</th
 									>
-									<div class="flex gap-1 items-center">
-										<span
-											class="badge badge-secondary badge-outline badge-xs text-[9px]"
-											>{job.run_batch}</span
-										>
-										<button
-											onclick={() => cancelJob(job.id)}
-											class="btn btn-ghost btn-xs btn-circle text-error h-4 w-4 min-h-0"
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-												stroke="currentColor"
-												class="w-3 h-3"
+									<th
+										class="p-3 border-r border-gray-400 tracking-wider"
+										>Parameters</th
+									>
+									<th
+										class="p-3 border-r border-gray-400 tracking-wider text-center"
+										>Images</th
+									>
+									<th
+										class="p-3 border-r border-gray-400 tracking-wider text-center"
+										>Upscales</th
+									>
+									<th
+										class="p-3 border-r border-gray-400 tracking-wider text-center"
+										>Status</th
+									>
+									<th class="p-3 text-right tracking-wider"
+										>Actions</th
+									>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-gray-400 bg-white">
+								{#each runs as run}
+									<tr
+										class="group hover:bg-win-magenta hover:text-white transition-none cursor-default"
+									>
+										<td class="p-3 align-top">
+											<span
+												class="font-pixel text-xl font-bold group-hover:text-yellow-300"
+												>#{run.batch_number}</span
 											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M6 18L18 6M6 6l12 12"
-												/>
-											</svg>
-										</button>
-									</div>
+											<div
+												class="text-[9px] uppercase mt-1 group-hover:text-white font-mono opacity-60 italic"
+											>
+												{formatDate(run.created_at)}
+											</div>
+										</td>
+										<td class="p-3 align-top">
+											<p
+												class="text-xs font-bold truncate max-w-[240px] font-mono group-hover:text-white"
+											>
+												{run.name || "Untitled Run"}
+											</p>
+											<div
+												class="flex items-center gap-2 mt-1"
+											>
+												<span
+													class="text-[9px] px-1 bg-gray-100 text-black border border-black uppercase font-bold group-hover:bg-black group-hover:text-white group-hover:border-white"
+													>{run.model_id}</span
+												>
+												<span
+													class="text-[9px] uppercase font-bold opacity-60 group-hover:opacity-100 group-hover:text-yellow-200 truncate max-w-[150px] italic"
+													>"{run.prompt}"</span
+												>
+											</div>
+										</td>
+										<td class="p-3 align-top text-center">
+											<div
+												class="text-sm font-bold font-pixel"
+											>
+												{run.total_images -
+													run.unrated_count}/{run.total_images}
+											</div>
+											<div
+												class="text-[9px] uppercase font-bold opacity-60 group-hover:text-white"
+											>
+												Rated
+											</div>
+										</td>
+										<td class="p-3 align-top text-center">
+											<div
+												class="text-sm font-bold font-pixel"
+											>
+												{run.upscaled_count}
+											</div>
+											<div
+												class="text-[9px] uppercase font-bold opacity-60 group-hover:text-white"
+											>
+												Total
+											</div>
+										</td>
+										<td class="p-3 align-top text-center">
+											{#if run.queued_jobs > 0}
+												<div
+													class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-yellow-100 border border-yellow-700 text-yellow-700 text-[10px] font-bold uppercase shadow-[1px_1px_0_0_rgba(0,0,0,0.2)]"
+												>
+													<span
+														class="loading loading-spinner h-2 w-2"
+													></span>
+													{run.queued_jobs} Q
+												</div>
+											{:else if run.unrated_count === 0 && run.total_images > 0}
+												<div
+													class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-green-100 border border-green-700 text-green-700 text-[10px] font-bold uppercase shadow-[1px_1px_0_0_rgba(0,0,0,0.2)]"
+												>
+													<span
+														class="material-symbols-outlined text-[12px]"
+														>check</span
+													> DONE
+												</div>
+											{:else}
+												<div
+													class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-100 border border-blue-700 text-blue-700 text-[10px] font-bold uppercase shadow-[1px_1px_0_0_rgba(0,0,0,0.2)]"
+												>
+													READY
+												</div>
+											{/if}
+										</td>
+										<td class="p-3 text-right align-top">
+											<a
+												href="/runs/{run.id}"
+												class="win95-btn px-3 py-1 text-[10px] font-bold uppercase no-underline text-black group-hover:bg-white group-hover:text-win-magenta"
+											>
+												Review
+											</a>
+										</td>
+									</tr>
+								{:else}
+									<tr>
+										<td
+											colspan="6"
+											class="p-20 text-center italic opacity-40"
+											>No batches found. Create your first
+											run!</td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Queue Sidebar -->
+	<div class="w-[320px] h-full flex flex-col shrink-0 bg-[#d4d0c8]">
+		<div class="win95-title-bar shrink-0">
+			<span>QUEUE_MGR</span>
+			<div class="flex gap-1">
+				<button
+					class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+				>
+					-
+				</button>
+				<button
+					class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+				>
+					x
+				</button>
+			</div>
+		</div>
+
+		<div class="p-3 border-b border-white shadow-[0_1px_0_#808080]">
+			<h3
+				class="text-black text-xs font-bold uppercase flex items-center gap-2 tracking-wider"
+			>
+				<span
+					class="material-symbols-outlined text-[18px] text-win-purple"
+					>layers</span
+				>
+				Process Queue
+			</h3>
+		</div>
+
+		<div
+			class="flex-1 overflow-y-auto p-4 flex flex-col gap-6 custom-scrollbar"
+		>
+			<!-- Active Area -->
+			<div class="flex flex-col gap-2">
+				<div class="flex justify-between items-center mb-1">
+					<h4
+						class="text-black text-[10px] font-bold uppercase tracking-wider bg-white px-2 py-0.5 border border-gray-400 shadow-[2px_2px_0_0_rgba(0,0,0,0.1)]"
+					>
+						ACTIVE_SEQ
+					</h4>
+					{#if processingJob}
+						<div
+							class="w-3 h-3 bg-green-500 border border-black animate-pulse shadow-[1px_1px_0_rgba(0,0,0,1)]"
+						></div>
+					{/if}
+				</div>
+
+				<div
+					class="p-3 win95-inset bg-gray-50 flex flex-col gap-3 group transition-colors"
+				>
+					{#if processingJob}
+						<div class="flex flex-col gap-2">
+							<div class="flex items-start justify-between">
+								<div class="flex flex-col">
+									<p
+										class="text-black text-sm font-bold leading-tight uppercase font-pixel tracking-wide"
+									>
+										Inference Active
+									</p>
+									<p
+										class="text-gray-600 text-[10px] font-mono mt-1 italic"
+									>
+										Processing next unit...
+									</p>
 								</div>
+							</div>
+							<div
+								class="h-6 w-full bg-white border border-gray-600 relative p-[2px]"
+							>
 								<div
-									class="text-xs font-semibold truncate mb-1"
+									class="h-full bg-gradient-to-r from-win-purple to-win-magenta animate-pulse"
+									style="width: 100%"
 								>
-									RUN: {job.run_name}
-								</div>
-								<div
-									class="text-[10px] opacity-70 line-clamp-2 italic"
-								>
-									"{job.config.steps} steps • {job.config
-										.scale} CFG"
+									<div
+										class="w-full h-full"
+										style="background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.2) 5px, rgba(255,255,255,0.2) 10px);"
+									></div>
 								</div>
 							</div>
 						</div>
-					{/each}
-					{#if queuedJobs.length > 6}
-						<div
-							class="bg-base-200/20 rounded-lg p-3 border border-dashed border-white/10 flex items-center justify-center text-xs opacity-40 italic"
-						>
-							+ {queuedJobs.length - 6} more jobs...
+					{:else if queuedJobs.length > 0}
+						<div class="flex flex-col gap-3">
+							<p
+								class="text-black text-[10px] font-bold text-center italic opacity-60"
+							>
+								Ready to initiate workers...
+							</p>
+							<div class="grid grid-cols-2 gap-2">
+								<button
+									onclick={() => runNextJob(false)}
+									disabled={processingJob || processingAll}
+									class="win95-btn h-10 bg-white text-black uppercase font-bold text-[10px] flex items-center justify-center gap-1"
+								>
+									<span
+										class="material-symbols-outlined text-[16px]"
+										>play_arrow</span
+									>
+									Run One
+								</button>
+								<button
+									onclick={() => runNextJob(true)}
+									disabled={processingJob || processingAll}
+									class="win95-btn h-10 bg-win-purple text-white uppercase font-bold text-[10px] flex items-center justify-center gap-1"
+								>
+									<span
+										class="material-symbols-outlined text-[16px]"
+										>dynamic_feed</span
+									>
+									Run All
+								</button>
+							</div>
 						</div>
+					{:else}
+						<p
+							class="text-[10px] text-center italic opacity-40 font-bold py-4"
+						>
+							No remaining jobs in global stack.
+						</p>
+					{/if}
+				</div>
+			</div>
+
+			<!-- List Area -->
+			<div class="flex flex-col gap-2">
+				<div
+					class="flex justify-between items-center border-b border-gray-400 pb-1 mb-2"
+				>
+					<h4
+						class="text-black text-[10px] font-bold uppercase tracking-wider"
+					>
+						UPCOMING ({queuedJobs.length})
+					</h4>
+					{#if queuedJobs.length > 0}
+						<button
+							onclick={cancelAll}
+							class="text-[9px] text-red-700 hover:text-red-500 font-bold uppercase underline"
+							>Clear Stack</button
+						>
+					{/if}
+				</div>
+
+				<div class="flex flex-col gap-2">
+					{#each queuedJobs.slice(0, 5) as job}
+						<div
+							class="p-2 border border-white border-b-black border-r-black bg-white shadow-[1px_1px_0_0_rgba(0,0,0,0.5)] cursor-default group"
+						>
+							<div class="flex justify-between items-start gap-2">
+								<div class="flex gap-2 items-center min-w-0">
+									<span
+										class="material-symbols-outlined text-win-purple text-[16px]"
+										>hourglass_empty</span
+									>
+									<div class="min-w-0">
+										<p
+											class="text-black text-xs font-bold leading-tight truncate group-hover:text-win-magenta"
+										>
+											{job.run_name || "Untitled"}
+										</p>
+										<p
+											class="text-gray-600 text-[9px] font-mono italic"
+										>
+											#{job.id} • {job.config.steps}s / {job
+												.config.scale}c
+										</p>
+									</div>
+								</div>
+								<button
+									onclick={() => cancelJob(job.id)}
+									class="text-black hover:text-red-600 flex-shrink-0"
+								>
+									<span
+										class="material-symbols-outlined text-[14px]"
+										>close</span
+									>
+								</button>
+							</div>
+						</div>
+					{/each}
+					{#if queuedJobs.length > 5}
+						<p
+							class="text-[10px] text-center italic opacity-40 border-t border-dashed border-gray-400 pt-2 font-bold"
+						>
+							+ {queuedJobs.length - 5} additional jobs pending
+						</p>
 					{/if}
 				</div>
 			</div>
 		</div>
-	{/if}
 
-	{#if loading}
-		<div class="flex justify-center py-20">
-			<span class="loading loading-spinner loading-lg text-primary"
-			></span>
-		</div>
-	{:else if error}
-		<div class="alert alert-error">
-			<span>{error}</span>
-		</div>
-	{:else if runs.length === 0}
-		<div class="card bg-base-200 shadow-xl">
-			<div class="card-body items-center text-center py-20">
-				<div class="bg-base-300 p-6 rounded-full mb-4">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						class="w-12 h-12 opacity-20"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-						/>
-					</svg>
-				</div>
-				<h2 class="card-title">No runs found</h2>
-				<p class="text-base-content/60">
-					Start your first experiment to see it here.
+		<!-- Performance Log Footer -->
+		<div class="p-2 bg-[#d4d0c8] border-t-2 border-white">
+			<div
+				class="flex items-center justify-between bg-black px-2 py-1 mb-1"
+			>
+				<span
+					class="text-[9px] text-white font-bold uppercase tracking-widest"
+					>System_Logs.log</span
+				>
+				<span
+					class="material-symbols-outlined text-green-400 text-[14px]"
+					>terminal</span
+				>
+			</div>
+			<div
+				class="h-48 bg-black win95-inset border-black p-2 font-mono text-[9px] text-green-500 overflow-y-auto custom-scrollbar leading-tight"
+			>
+				<p class="opacity-50 text-[8px] mb-2">
+					// INIT SEQUENCE v1.2.0-PATCH
 				</p>
-				<div class="card-actions mt-6">
-					<a href="/create" class="btn btn-primary btn-outline"
-						>Create First Run</a
-					>
-				</div>
+				{#each logs as log}
+					<p class="mb-1">{log}</p>
+				{/each}
+				{#if processingJob || processingAll}
+					<p class="text-yellow-400 mt-1 animate-pulse">
+						[RUNNING] Worker processing job stack...
+					</p>
+				{/if}
+				<p class="mt-2 text-gray-500">_</p>
 			</div>
 		</div>
-	{:else}
-		<div class="overflow-x-auto bg-base-200 rounded-xl shadow-xl">
-			<table class="table table-zebra">
-				<thead>
-					<tr>
-						<th>Batch</th>
-						<th>Details</th>
-						<th>Progress</th>
-						<th>Stats</th>
-						<th>Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each runs as run: Run}
-						<tr class="hover">
-							<td class="font-mono text-lg font-bold"
-								>#{run.batch_number}</td
-							>
-							<td>
-								<div class="max-w-md">
-									<div class="font-bold truncate">
-										{run.name}
-									</div>
-									<div class="text-xs opacity-50">
-										{run.model_id} • {formatDate(
-											run.created_at,
-										)}
-									</div>
-									<div
-										class="text-xs italic truncate mt-1 opacity-70"
-									>
-										"{run.prompt}"
-									</div>
-								</div>
-							</td>
-							<td>
-								<div class="flex flex-col gap-1 min-w-[120px]">
-									<div class="flex justify-between text-xs">
-										<span>Rated</span>
-										<span
-											>{run.total_images -
-												run.unrated_count} / {run.total_images}</span
-										>
-									</div>
-									<progress
-										class="progress progress-primary w-full"
-										value={run.total_images -
-											run.unrated_count}
-										max={run.total_images}
-									></progress>
-								</div>
-							</td>
-							<td>
-								<div class="flex flex-col gap-1">
-									<div class="flex gap-2">
-										{#if run.queued_jobs > 0}
-											<div
-												class="badge badge-warning gap-1 badge-sm"
-											>
-												<span
-													class="loading loading-spinner loading-xs"
-												></span>
-												{run.queued_jobs} Q
-											</div>
-										{/if}
-										{#if run.upscaled_count > 0}
-											<div
-												class="badge badge-secondary badge-sm"
-											>
-												{run.upscaled_count} UP
-											</div>
-										{/if}
-										{#if run.unrated_count === 0 && run.total_images > 0}
-											<div
-												class="badge badge-success badge-sm"
-											>
-												Rated
-											</div>
-										{/if}
-									</div>
-									<div
-										class="text-[10px] font-mono opacity-50 flex items-center gap-1 mt-1"
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="1.5"
-											stroke="currentColor"
-											class="w-3 h-3 text-secondary"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-											/>
-										</svg>
-										{run.total_cost.toFixed(2)} credits
-									</div>
-								</div>
-							</td>
-							<td>
-								<a
-									href="/runs/{run.id}"
-									class="btn btn-ghost btn-sm">Review</a
-								>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
+	</div>
 </div>

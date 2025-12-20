@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/images", tags=["images"])
 async def list_images(
     run_id: Optional[str] = Query(None, description="Filter by run ID"),
     unrated_only: bool = Query(False, description="Only show unrated images"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
@@ -128,16 +128,25 @@ async def upscale_image(
     if not config or not config.raw_response_json:
         raise HTTPException(status_code=400, detail="Image has no config data - cannot determine original URL")
     
-    # Parse raw response to get image URL
+    # Parse raw response to get the correct original image URL
     try:
+        if not config.raw_response_json:
+             raise HTTPException(status_code=400, detail="Image has no raw response data - cannot upscale")
+             
         raw_response = json.loads(config.raw_response_json)
         image_urls = raw_response.get("images", [])
+        
         if not image_urls:
-            raise HTTPException(status_code=400, detail="No image URLs found in config")
-        # Use the first URL (or we could store which index this image was)
-        image_url = image_urls[0]
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid config response data")
+            raise HTTPException(status_code=400, detail="No source image URLs found in generation records")
+            
+        # Use stored batch_index to pick the correct URL from the original batch
+        index = image.batch_index if image.batch_index is not None else 0
+        if index >= len(image_urls):
+            index = 0 # Fallback
+            
+        image_url = image_urls[index]
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid generation record data")
     
     try:
         # Call SinkIn upscale API
@@ -206,6 +215,8 @@ async def score_image(
         image.prompt_adherence = request.prompt_adherence
     if request.background_score is not None:
         image.background_score = request.background_score
+    if request.is_failed is not None:
+        image.is_failed = request.is_failed
     
     db.commit()
     

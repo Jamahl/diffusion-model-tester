@@ -2,10 +2,84 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link href="https://fonts.googleapis.com/css2?family=VT323&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+		<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+		<style>
+			body {
+				background-color: #5f5f5f;
+				background-image: 
+					linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000),
+					linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000);
+				background-size: 4px 4px;
+				background-position: 0 0, 2px 2px;
+				margin: 0;
+				height: 100vh;
+				overflow: hidden;
+			}
+			body::before {
+				content: "";
+				position: fixed;
+				top: 0; left: 0; right: 0; bottom: 0;
+				background: linear-gradient(135deg, rgba(85, 255, 204, 0.4), rgba(255, 0, 128, 0.4));
+				z-index: -1;
+				pointer-events: none;
+			}
+			.win95-window {
+				background-color: #d4d0c8;
+				box-shadow: inset 1px 1px 0px #ffffff, inset -1px -1px 0px #404040, 2px 2px 0px 0px #000000;
+				border: 2px solid #d4d0c8;
+			}
+			.win95-title-bar {
+				background: linear-gradient(90deg, #ff0080, #7928ca);
+				color: white;
+				padding: 3px 6px;
+				font-family: 'Space Mono', monospace;
+				font-weight: bold;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				text-shadow: 1px 1px #000;
+			}
+			.win95-btn {
+				background-color: #d4d0c8;
+				border: 2px solid;
+				border-color: #ffffff #404040 #404040 #ffffff;
+				color: black;
+				box-shadow: 1px 1px 0px black;
+			}
+			.win95-btn:active {
+				border-color: #404040 #ffffff #ffffff #404040;
+				box-shadow: none;
+				transform: translate(1px, 1px);
+			}
+			.win95-input {
+				background-color: white;
+				border: 2px solid;
+				border-color: #404040 #ffffff #ffffff #404040;
+				color: black;
+				font-family: 'VT323', monospace;
+				font-size: 1.25rem;
+			}
+			.win95-inset {
+				border: 2px solid;
+				border-color: #808080 #ffffff #ffffff #808080;
+				background: #fff;
+			}
+			.custom-scrollbar::-webkit-scrollbar { width: 16px; }
+			.custom-scrollbar::-webkit-scrollbar-track { background: #d4d0c8; }
+			.custom-scrollbar::-webkit-scrollbar-thumb {
+				background-color: #d4d0c8;
+				border: 2px solid;
+				border-color: #ffffff #404040 #404040 #ffffff;
+			}
+		</style>
 		%sveltekit.head%
 	</head>
-	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
+	<body class="font-mono text-black overflow-hidden h-screen" data-sveltekit-preload-data="hover">
+		<div style="display: contents" class="h-full">%sveltekit.body%</div>
 	</body>
 </html>

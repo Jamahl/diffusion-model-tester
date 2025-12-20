@@ -12,8 +12,9 @@ class Settings(BaseSettings):
     sinkin_base_url: str = "https://sinkin.ai/api"
     
     # Storage paths
-    images_dir: str = "storage/images"
-    assets_dir: str = "storage/assets"
+    # Storage paths
+    images_dir: str = os.path.join(os.path.dirname(__file__), "storage", "images")
+    assets_dir: str = os.path.join(os.path.dirname(__file__), "storage", "assets")
     
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    Column, String, Integer, Float, Text, DateTime, 
+    Column, String, Integer, Float, Text, DateTime, Boolean,
     ForeignKey, Enum as SQLEnum
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -61,6 +61,8 @@ class Image(Base):
     file_path = Column(String(500), nullable=True)
     upscale_url = Column(String(500), nullable=True)
     inf_id = Column(String(100), nullable=True)  # SinkIn inference ID
+    batch_index = Column(Integer, nullable=True)  # Index in the batch (0-N)
+    is_failed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Scoring fields

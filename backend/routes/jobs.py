@@ -90,6 +90,7 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
             init_image_path=init_image_path,
             image_strength=config.get("image_strength", 0.75),
             controlnet=config.get("controlnet"),
+            use_default_neg=config.get("use_default_neg", True),
         )
         
         # Check for API error and handle fallback if img2img
@@ -111,6 +112,7 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
                     lora=config.get("lora"),
                     lora_scale=config.get("lora_scale", 0.75),
                     init_image_path=None, # Fallback
+                    use_default_neg=config.get("use_default_neg", True),
                 )
             
             # If still error (or not img2img)
@@ -147,6 +149,7 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
                 run_id=run.id,
                 file_path=file_path if file_path else None,
                 inf_id=inf_id,
+                batch_index=i,
             )
             db.add(image)
             db.flush()  # Get the image ID
@@ -158,7 +161,7 @@ async def run_job(request: JobRunRequest, db: Session = Depends(get_db)):
                 scale=config.get("scale", 7.5),
                 width=config.get("width", 512),
                 height=config.get("height", 768),
-                seed=config.get("seed", -1),
+                seed=response.get("seed", config.get("seed", -1)),
                 scheduler=config.get("scheduler", "DPMSolverMultistep"),
                 image_strength=config.get("image_strength") if init_image_path else None,
                 controlnet=config.get("controlnet"),

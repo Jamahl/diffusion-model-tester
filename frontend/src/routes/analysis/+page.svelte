@@ -38,6 +38,14 @@
     let sortBy = $state<keyof Row | "score">("batch");
     let sortOrder = $state<"asc" | "desc">("desc");
 
+    // Hover Preview State
+    let hoveredRow = $state<Row | null>(null);
+    let mousePos = $state({ x: 0, y: 0 });
+
+    function handleMouseMove(e: MouseEvent) {
+        mousePos = { x: e.clientX, y: e.clientY };
+    }
+
     async function fetchData() {
         try {
             loading = true;
@@ -56,7 +64,8 @@
                 (r: Row) =>
                     r.prompt.toLowerCase().includes(search.toLowerCase()) ||
                     r.run_name.toLowerCase().includes(search.toLowerCase()) ||
-                    r.model_id.toLowerCase().includes(search.toLowerCase()),
+                    r.model_id.toLowerCase().includes(search.toLowerCase()) ||
+                    r.batch.toString().includes(search),
             )
             .sort((a: Row, b: Row) => {
                 let valA: any;
@@ -95,62 +104,82 @@
     onMount(fetchData);
 </script>
 
-<div class="flex flex-col gap-6 h-full">
+<div class="flex flex-col h-full overflow-hidden font-mono bg-[#d4d0c8]">
+    <!-- Window Header -->
+    <div class="win95-title-bar shrink-0">
+        <span class="flex items-center gap-2"
+            ><span class="material-symbols-outlined text-[16px]">analytics</span
+            > C:\EXPERIMENTS\ANALYSIS.EXE</span
+        >
+        <div class="flex gap-1">
+            <button
+                class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+                >_</button
+            >
+            <button
+                class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+                >□</button
+            >
+            <button
+                class="w-4 h-4 bg-[#c0c0c0] text-black text-[10px] flex items-center justify-center border border-white border-b-black border-r-black leading-none font-bold"
+                >x</button
+            >
+        </div>
+    </div>
+
+    <!-- Toolbar -->
     <div
-        class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+        class="p-4 border-b-2 border-white shadow-[0_1px_0_#808080] flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
     >
         <div>
-            <h1 class="text-3xl font-bold">Cross-Run Analysis</h1>
-            <p class="text-base-content/60">
-                Compare parameters and scores across all experiment batches.
+            <h1
+                class="text-2xl font-pixel uppercase tracking-wider text-black leading-none"
+            >
+                Cross-Run Analysis
+            </h1>
+            <p
+                class="text-win-purple text-[10px] font-bold mt-1 tracking-tight italic"
+            >
+                &gt;_ Comparing parameter stacks and adherence metrics
             </p>
         </div>
         <div class="flex gap-2 w-full md:w-auto">
-            <input
-                type="text"
-                bind:value={search}
-                placeholder="Search prompts, runs..."
-                class="input input-bordered w-full md:w-64"
-            />
+            <div class="relative flex-1 md:flex-none">
+                <input
+                    type="text"
+                    bind:value={search}
+                    placeholder="Search stack..."
+                    class="win95-input h-9 px-2 text-base w-full md:w-64"
+                />
+            </div>
             <a
                 href="http://localhost:8000/api/analysis/csv"
-                class="btn btn-primary"
+                class="win95-btn h-9 px-4 text-xs font-bold uppercase flex items-center gap-2 no-underline text-black hover:bg-white"
                 download
             >
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                    class="w-5 h-5"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-                    />
-                </svg>
-                Export CSV
+                <span class="material-symbols-outlined text-[16px]"
+                    >download</span
+                > Export
             </a>
         </div>
     </div>
 
-    {#if loading}
-        <div class="flex-1 flex items-center justify-center">
-            <span class="loading loading-spinner loading-lg text-primary"
-            ></span>
-        </div>
-    {:else}
-        <div
-            class="card bg-base-200 shadow-xl overflow-hidden border border-white/5"
-        >
-            <div class="overflow-x-auto">
-                <table class="table table-sm table-pin-rows">
-                    <thead>
-                        <tr class="bg-base-300">
+    <!-- Main Table Area -->
+    <div class="flex-1 overflow-auto p-4 custom-scrollbar">
+        {#if loading}
+            <div class="h-full flex items-center justify-center">
+                <span class="loading loading-spinner loading-lg text-primary"
+                ></span>
+            </div>
+        {:else}
+            <div class="win95-inset bg-white">
+                <table class="table table-xs w-full text-left border-collapse">
+                    <thead class="sticky top-0 z-20">
+                        <tr
+                            class="bg-gray-200 text-black text-[10px] uppercase font-bold border-b-2 border-black"
+                        >
                             <th
-                                class="cursor-pointer hover:bg-base-100"
+                                class="p-2 border-r border-gray-400 cursor-pointer hover:bg-gray-300"
                                 onclick={() => toggleSort("batch")}
                             >
                                 Batch {sortBy === "batch"
@@ -159,9 +188,10 @@
                                         : "↓"
                                     : ""}
                             </th>
-                            <th>Image</th>
+                            <th class="p-2 border-r border-gray-400">Preview</th
+                            >
                             <th
-                                class="cursor-pointer hover:bg-base-100"
+                                class="p-2 border-r border-gray-400 cursor-pointer hover:bg-gray-300"
                                 onclick={() => toggleSort("model_id")}
                             >
                                 Model {sortBy === "model_id"
@@ -170,9 +200,11 @@
                                         : "↓"
                                     : ""}
                             </th>
-                            <th class="max-w-xs">Config</th>
+                            <th class="p-2 border-r border-gray-400"
+                                >Configuration</th
+                            >
                             <th
-                                class="cursor-pointer hover:bg-base-100 text-center"
+                                class="p-2 border-r border-gray-400 text-center cursor-pointer hover:bg-gray-300"
                                 onclick={() => toggleSort("score")}
                             >
                                 Quality {sortBy === "score"
@@ -181,139 +213,237 @@
                                         : "↓"
                                     : ""}
                             </th>
-                            <th class="text-center">Scores (A/P/B)</th>
-                            <th class="text-center">Prod</th>
-                            <th>Prompt</th>
-                            <th>Actions</th>
+                            <th class="p-2 border-r border-gray-400 text-center"
+                                >A/P/B</th
+                            >
+                            <th class="p-2 border-r border-gray-400 text-center"
+                                >Usage</th
+                            >
+                            <th class="p-2 border-r border-gray-400">Prompt</th>
+                            <th class="p-2 text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {#each filteredRows as row: Row (row.id)}
-                            <tr class="hover group">
-                                <td class="font-mono font-bold opacity-50"
+                    <tbody class="divide-y divide-gray-300">
+                        {#each filteredRows as row (row.id)}
+                            <tr
+                                class="hover:bg-win-magenta hover:text-white group"
+                            >
+                                <td
+                                    class="p-2 font-pixel text-lg font-bold opacity-70 group-hover:opacity-100 group-hover:text-yellow-300"
                                     >#{row.batch}</td
                                 >
-                                <td>
-                                    <div class="avatar">
+                                <td class="p-2">
+                                    <a
+                                        href="/runs/{row.run_id}/review/{row.id}"
+                                        class="block"
+                                        onmouseenter={() => (hoveredRow = row)}
+                                        onmouseleave={() => (hoveredRow = null)}
+                                        onmousemove={handleMouseMove}
+                                    >
                                         <div
-                                            class="w-12 h-12 rounded-lg ring-1 ring-white/10 group-hover:ring-primary transition-all"
+                                            class="w-10 h-10 border border-black shadow-sm group-hover:border-white transition-transform group-hover:scale-110"
                                         >
                                             <img
                                                 src={getImageUrl(
                                                     row.image.file_path,
                                                 )}
                                                 alt="Result"
+                                                class="w-full h-full object-cover"
                                             />
                                         </div>
-                                    </div>
+                                    </a>
                                 </td>
-                                <td>
+                                <td class="p-2">
                                     <div class="flex flex-col">
                                         <span
-                                            class="text-[10px] uppercase font-bold opacity-40"
+                                            class="text-[9px] uppercase font-bold opacity-40 group-hover:opacity-100"
                                             >{row.model_id}</span
                                         >
                                         <span
-                                            class="text-xs font-semibold truncate max-w-[100px]"
+                                            class="text-[10px] font-bold truncate max-w-[80px] group-hover:text-yellow-200"
                                             >{row.run_name}</span
                                         >
                                     </div>
                                 </td>
-                                <td>
-                                    <div class="flex flex-wrap gap-1">
+                                <td class="p-2">
+                                    <div
+                                        class="flex flex-wrap gap-1 max-w-[200px]"
+                                    >
                                         <span
-                                            class="badge badge-outline badge-xs opacity-60"
-                                            >{row.config.steps} steps</span
+                                            class="px-1 border border-black bg-gray-100 text-[8px] font-bold group-hover:bg-black group-hover:text-white group-hover:border-white uppercase"
+                                            >{row.config.steps} STEPS</span
                                         >
                                         <span
-                                            class="badge badge-outline badge-xs opacity-60"
-                                            >{row.config.scale} cfg</span
+                                            class="px-1 border border-black bg-gray-100 text-[8px] font-bold group-hover:bg-black group-hover:text-white group-hover:border-white uppercase"
+                                            >{row.config.scale} CFG</span
                                         >
                                         <span
-                                            class="badge badge-outline badge-xs opacity-60 uppercase"
+                                            class="px-1 border border-black bg-gray-100 text-[8px] font-bold group-hover:bg-black group-hover:text-white group-hover:border-white uppercase italic"
                                             >{row.config.scheduler}</span
                                         >
+                                        <span
+                                            class="px-1 border border-black bg-gray-50 text-[8px] font-bold group-hover:bg-black group-hover:text-white group-hover:border-white"
+                                            >{row.config.width}x{row.config
+                                                .height}</span
+                                        >
                                     </div>
                                 </td>
-                                <td class="text-center">
+                                <td class="p-2 text-center">
                                     {#if row.scores.overall_quality}
-                                        <div
-                                            class="badge badge-primary font-bold"
-                                        >
-                                            {row.scores.overall_quality}
-                                        </div>
-                                    {:else}
-                                        <div
-                                            class="badge badge-ghost opacity-20"
-                                        >
-                                            -
-                                        </div>
-                                    {/if}
-                                </td>
-                                <td class="text-center">
-                                    <div
-                                        class="flex gap-1 justify-center opacity-70"
-                                    >
-                                        <span class="tooltip" data-tip="Anatomy"
-                                            >{row.scores.anatomy_score ||
-                                                "-"}</span
-                                        >
-                                        <span>/</span>
                                         <span
-                                            class="tooltip"
-                                            data-tip="Prompt Adherence"
-                                            >{row.scores.prompt_adherence ||
-                                                "-"}</span
+                                            class="font-pixel text-xl font-bold group-hover:text-yellow-300"
+                                            >{row.scores.overall_quality}</span
                                         >
-                                        <span>/</span>
-                                        <span
-                                            class="tooltip"
-                                            data-tip="Background"
-                                            >{row.scores.background_score ||
-                                                "-"}</span
-                                        >
-                                    </div>
-                                </td>
-                                <td class="text-center">
-                                    {#if row.scores.use_again === "yes"}
-                                        <div
-                                            class="badge badge-success badge-xs"
-                                        >
-                                            YES
-                                        </div>
-                                    {:else if row.scores.use_again === "no"}
-                                        <div class="badge badge-error badge-xs">
-                                            NO
-                                        </div>
-                                    {:else if row.scores.use_again === "test_more"}
-                                        <div
-                                            class="badge badge-warning badge-xs"
-                                        >
-                                            MAYBE
-                                        </div>
                                     {:else}
                                         <span class="opacity-20">-</span>
                                     {/if}
                                 </td>
-                                <td class="max-w-xs">
+                                <td
+                                    class="p-2 text-center text-[10px] font-bold"
+                                >
+                                    <span
+                                        class="opacity-60 group-hover:opacity-100"
+                                        >{row.scores.anatomy_score || "-"}</span
+                                    >
+                                    <span class="opacity-30">/</span>
+                                    <span
+                                        class="opacity-60 group-hover:opacity-100"
+                                        >{row.scores.prompt_adherence ||
+                                            "-"}</span
+                                    >
+                                    <span class="opacity-30">/</span>
+                                    <span
+                                        class="opacity-60 group-hover:opacity-100"
+                                        >{row.scores.background_score ||
+                                            "-"}</span
+                                    >
+                                </td>
+                                <td class="p-2 text-center">
+                                    {#if row.scores.use_again === "yes"}
+                                        <span
+                                            class="text-[9px] font-bold text-green-700 bg-green-100 px-1 border border-green-700 group-hover:bg-green-400 group-hover:text-black group-hover:border-black"
+                                            >YES</span
+                                        >
+                                    {:else if row.scores.use_again === "no"}
+                                        <span
+                                            class="text-[9px] font-bold text-red-700 bg-red-100 px-1 border border-red-700 group-hover:bg-white group-hover:text-red-700 group-hover:border-white"
+                                            >NO</span
+                                        >
+                                    {:else if row.scores.use_again === "test_more"}
+                                        <span
+                                            class="text-[9px] font-bold text-yellow-700 bg-yellow-100 px-1 border border-yellow-700 group-hover:bg-yellow-400 group-hover:text-black group-hover:border-black"
+                                            >MAYBE</span
+                                        >
+                                    {:else}
+                                        <span
+                                            class="opacity-20 group-hover:opacity-40"
+                                            >-</span
+                                        >
+                                    {/if}
+                                </td>
+                                <td class="p-2 max-w-xs">
                                     <p
-                                        class="text-[10px] line-clamp-2 opacity-60 italic leading-tight"
+                                        class="text-[10px] line-clamp-1 italic opacity-60 group-hover:opacity-100 group-hover:text-yellow-100"
                                     >
                                         "{row.prompt}"
                                     </p>
                                 </td>
-                                <td>
+                                <td class="p-2 text-right">
                                     <a
                                         href="/runs/{row.run_id}/review/{row.id}"
-                                        class="btn btn-ghost btn-xs"
+                                        class="win95-btn px-2 py-0.5 text-[9px] font-bold uppercase no-underline text-black group-hover:bg-white group-hover:text-win-magenta"
                                     >
-                                        View
+                                        Open
                                     </a>
+                                </td>
+                            </tr>
+                        {:else}
+                            <tr>
+                                <td
+                                    colspan="9"
+                                    class="p-20 text-center opacity-40 italic font-pixel text-2xl tracking-widest bg-gray-50"
+                                >
+                                    QUERY_RESULT: NULL_SET
                                 </td>
                             </tr>
                         {/each}
                     </tbody>
                 </table>
+            </div>
+        {/if}
+    </div>
+
+    <!-- Hover Preview Portal -->
+    {#if hoveredRow}
+        <div
+            class="fixed z-[100] pointer-events-none"
+            style="left: {mousePos.x + 20}px; top: {Math.max(
+                10,
+                Math.min(600, mousePos.y - 150),
+            )}px;"
+        >
+            <div
+                class="win95-window p-1 shadow-2xl animate-in fade-in zoom-in duration-200 border-2 border-white shadow-[4px_4px_0_0_rgba(0,0,0,0.3)] bg-[#c0c0c0]"
+            >
+                <div
+                    class="win95-title-bar py-1 px-3 flex justify-between items-center bg-win-blue"
+                >
+                    <span
+                        class="text-[10px] uppercase font-bold text-white tracking-widest flex items-center gap-2"
+                    >
+                        <span class="material-symbols-outlined text-[14px]"
+                            >image</span
+                        >
+                        DATA_PREVIEW: {hoveredRow.id.slice(0, 8)}.EXE
+                    </span>
+                </div>
+
+                <div class="p-1 bg-[#808080] win95-inset border-2">
+                    <img
+                        src={getImageUrl(hoveredRow.image.file_path)}
+                        alt="Preview"
+                        class="max-w-[340px] max-h-[500px] object-contain block bg-checkered shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"
+                    />
+                </div>
+
+                <div
+                    class="bg-[#d4d0c8] p-3 border-t-2 border-white mt-1 shadow-[inset_1px_1px_0_#fff]"
+                >
+                    <div class="flex items-start gap-2 mb-2">
+                        <span
+                            class="material-symbols-outlined text-win-purple text-base"
+                            >terminal</span
+                        >
+                        <p
+                            class="text-[11px] font-bold text-black leading-tight italic break-words max-w-[300px]"
+                        >
+                            "{hoveredRow.prompt}"
+                        </p>
+                    </div>
+
+                    <div
+                        class="flex justify-between items-center py-1 border-t border-gray-400 mt-2"
+                    >
+                        <div class="flex flex-col">
+                            <span
+                                class="text-[8px] uppercase font-bold opacity-50"
+                                >Cluster_ID</span
+                            >
+                            <span class="text-[10px] font-pixel text-win-blue"
+                                >BATCH_00{hoveredRow.batch}</span
+                            >
+                        </div>
+                        <div class="flex flex-col text-right">
+                            <span
+                                class="text-[8px] uppercase font-bold opacity-50"
+                                >Logic_Engine</span
+                            >
+                            <span class="text-[10px] font-bold text-win-magenta"
+                                >{hoveredRow.model_id}</span
+                            >
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     {/if}
