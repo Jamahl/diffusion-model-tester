@@ -94,14 +94,12 @@
 					{#each menuItems as item}
 						<a
 							href={item.href}
-							class="flex items-center gap-3 px-3 py-2 transition-none group border-2 {$page
-								.url.pathname === item.href
-								? 'win95-btn bg-win-magenta text-white border-white border-b-black border-r-black'
-								: 'border-transparent hover:border-[#ffffff] hover:border-b-[#404040] hover:border-r-[#404040] hover:bg-white/50 no-underline text-black'}"
+							class="flex items-center gap-3 px-3 py-2 transition-none group border-2 {$page.url.pathname === item.href
+							? 'win95-btn bg-win-magenta text-white border-white border-b-black border-r-black'
+							: 'border-transparent hover:border-[#ffffff] hover:border-b-[#404040] hover:border-r-[#404040] hover:bg-white/50 no-underline text-black'}"
 						>
 							<span
-								class="material-symbols-outlined text-[20px] {$page
-									.url.pathname === item.href
+								class="material-symbols-outlined text-[20px] {$page.url.pathname === item.href
 									? 'text-white'
 									: 'text-win-purple group-hover:text-win-purple'}"
 								>{item.icon}</span

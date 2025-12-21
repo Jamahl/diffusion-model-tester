@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { browser } from "$app/environment";
     import { page } from "$app/state";
     import { toasts } from "$lib/stores/toasts";
 
@@ -53,12 +53,11 @@
     let unratedOnly = $state(false);
     let loading = $state(true);
     let error = $state<string | null>(null);
-    async function fetchRunDetail() {
-        const runId = page.params.id;
-        if (!runId) return;
+    const runId = $derived(page.params.id ?? null);
+    async function fetchRunDetail(targetRunId: string) {
         try {
             const res = await fetch(
-                `http://localhost:8000/api/runs/${runId}`,
+                `http://localhost:8000/api/runs/${targetRunId}`,
             );
             if (!res.ok) throw new Error("Run not found");
             const data = await res.json();
@@ -67,7 +66,7 @@
             let config = null;
             if (data.counts.total_images > 0) {
                 const imgRes = await fetch(
-                    `http://localhost:8000/api/images?run_id=${runId}&limit=1`,
+                    `http://localhost:8000/api/images?run_id=${targetRunId}&limit=1`,
                 );
                 const imgData = await imgRes.json();
                 if (imgData.images.length > 0) {
@@ -81,13 +80,11 @@
         }
     }
 
-    async function fetchImages() {
-        const runId = page.params.id;
-        if (!runId) return;
+    async function fetchImages(targetRunId: string) {
         try {
             loading = true;
             const url = new URL(`http://localhost:8000/api/images`);
-            url.searchParams.set("run_id", runId);
+            url.searchParams.set("run_id", targetRunId);
             if (unratedOnly) url.searchParams.set("unrated_only", "true");
 
             const res = await fetch(url.toString());
@@ -133,13 +130,30 @@
         return `http://localhost:8000/images/${filename}`;
     }
 
+    let lastRunId: string | null = null;
+
     $effect(() => {
-        fetchImages();
+        if (!browser) return;
+        const currentRunId = runId;
+        if (!currentRunId || currentRunId === lastRunId) return;
+
+        lastRunId = currentRunId;
+        run = null;
+        images = [];
+        loading = true;
+        error = null;
+
+        fetchRunDetail(currentRunId);
+        fetchImages(currentRunId);
     });
 
-    onMount(async () => {
-        await fetchRunDetail();
-        await fetchImages();
+    $effect(() => {
+        if (!browser) return;
+        const _ = unratedOnly;
+        const currentRunId = runId;
+        if (currentRunId && run) {
+            fetchImages(currentRunId);
+        }
     });
 </script>
 
@@ -343,15 +357,6 @@
                                     </div>
                                 {/if}
 
-                                {#if scoringId === image.id}
-                                    <div
-                                        class="absolute inset-0 bg-black/40 flex items-center justify-center z-30"
-                                    >
-                                        <span
-                                            class="loading loading-spinner loading-md text-white"
-                                        ></span>
-                                    </div>
-                                {/if}
                             </a>
                         </div>
                         <div class="flex flex-col items-center">
