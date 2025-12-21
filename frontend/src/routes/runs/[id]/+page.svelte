@@ -24,16 +24,26 @@
         };
     }
 
+    interface ImageScores {
+        facial_detail_realism?: number | null;
+        body_proportions?: number | null;
+        complexity_artistry?: number | null;
+        composition_framing?: number | null;
+        lighting_color?: number | null;
+        resolution_clarity?: number | null;
+        style_consistency?: number | null;
+        prompt_adherence?: number | null;
+        artifacts?: number | null;
+    }
+
     interface Image {
         id: string;
         file_path: string | null;
-        overall_quality: number | null;
+        score_overall: number | null;
         is_rated: boolean;
         is_failed: boolean;
         upscale_url: string | null;
-        score_fidelity?: number;
-        score_alignment?: number;
-        score_aesthetics?: number;
+        scores?: ImageScores;
         flaws?: string;
         curation_status?: string;
     }
@@ -43,12 +53,12 @@
     let unratedOnly = $state(false);
     let loading = $state(true);
     let error = $state<string | null>(null);
-    let scoringId = $state<string | null>(null);
-
     async function fetchRunDetail() {
+        const runId = page.params.id;
+        if (!runId) return;
         try {
             const res = await fetch(
-                `http://localhost:8000/api/runs/${page.params.id}`,
+                `http://localhost:8000/api/runs/${runId}`,
             );
             if (!res.ok) throw new Error("Run not found");
             const data = await res.json();
@@ -57,7 +67,7 @@
             let config = null;
             if (data.counts.total_images > 0) {
                 const imgRes = await fetch(
-                    `http://localhost:8000/api/images?run_id=${page.params.id}&limit=1`,
+                    `http://localhost:8000/api/images?run_id=${runId}&limit=1`,
                 );
                 const imgData = await imgRes.json();
                 if (imgData.images.length > 0) {
@@ -72,10 +82,12 @@
     }
 
     async function fetchImages() {
+        const runId = page.params.id;
+        if (!runId) return;
         try {
             loading = true;
             const url = new URL(`http://localhost:8000/api/images`);
-            url.searchParams.set("run_id", page.params.id);
+            url.searchParams.set("run_id", runId);
             if (unratedOnly) url.searchParams.set("unrated_only", "true");
 
             const res = await fetch(url.toString());
@@ -85,38 +97,6 @@
             console.error("Failed to fetch images", e);
         } finally {
             loading = false;
-        }
-    }
-
-    async function quickScore(imageId: string, score: number) {
-        scoringId = imageId;
-        try {
-            const res = await fetch(
-                `http://localhost:8000/api/images/${imageId}/score`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ overall_quality: score }),
-                },
-            );
-            if (res.ok) {
-                // Update local state
-                images = images.map((img) =>
-                    img.id === imageId
-                        ? { ...img, overall_quality: score, is_rated: true }
-                        : img,
-                );
-                if (unratedOnly) {
-                    // If filtered by unrated, remove it from view
-                    images = images.filter((img) => img.id !== imageId);
-                }
-                if (run) run.counts.unrated--;
-                // Minimal toast to not distract
-            }
-        } catch (e) {
-            toasts.error("Failed to save score");
-        } finally {
-            scoringId = null;
         }
     }
 
@@ -302,29 +282,8 @@
                 {#each images as image}
                     <div class="flex flex-col gap-2 group">
                         <div
-                            class="relative aspect-[512/768] win95-window p-1 bg-[#c0c0c0] group-hover:bg-win-magenta transition-colors duration-0"
+                            class="relative aspect-[3/4] win95-window p-1 bg-[#c0c0c0] group-hover:bg-win-magenta transition-colors duration-0"
                         >
-                            <!-- Overlay Scoring Controls -->
-                            <div
-                                class="absolute inset-x-0 bottom-0 p-2 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex flex-wrap justify-center gap-1"
-                            >
-                                {#each Array(10) as _, i}
-                                    <button
-                                        onclick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            quickScore(image.id, i + 1);
-                                        }}
-                                        class="w-5 h-5 flex items-center justify-center text-[9px] font-bold border border-white {image.overall_quality ===
-                                        i + 1
-                                            ? 'bg-win-magenta text-white'
-                                            : 'bg-[#c0c0c0] text-black hover:bg-white'}"
-                                    >
-                                        {i + 1}
-                                    </button>
-                                {/each}
-                            </div>
-
                             <!-- Failed Toggle Button -->
                             <button
                                 onclick={(e) => {
@@ -368,11 +327,11 @@
                                     </div>
                                 {/if}
 
-                                {#if image.overall_quality}
+                                {#if typeof image.score_overall === "number"}
                                     <div
                                         class="absolute -top-2 -right-2 w-8 h-8 flex items-center justify-center bg-blue-800 text-white font-pixel text-lg border-2 border-white shadow-[2px_2px_0_0_black] z-10"
                                     >
-                                        {image.overall_quality}
+                                        {image.score_overall}
                                     </div>
                                 {/if}
 

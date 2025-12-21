@@ -3,7 +3,24 @@
     import { afterNavigate } from "$app/navigation";
     import { browser } from "$app/environment";
 
-    type CurationStatus = "trash" | "keep" | "showcase" | null;
+    type UseAgainChoice = "yes" | "no" | "test_more" | null;
+type CurationStatus = "trash" | "use_again" | "top_1pct" | null;
+
+interface ScoreBreakdown {
+    score_overall: number | null;
+    score_facial_detail_realism: number | null;
+    score_body_proportions: number | null;
+    score_complexity_artistry: number | null;
+    score_composition_framing: number | null;
+    score_lighting_color: number | null;
+    score_resolution_clarity: number | null;
+    score_style_consistency: number | null;
+    score_prompt_adherence: number | null;
+    score_artifacts: number | null;
+    use_again: UseAgainChoice;
+    curation_status: CurationStatus;
+    flaws: string | string[] | null;
+}
 
     interface Row {
         id: string;
@@ -22,14 +39,7 @@
             seed: number | null;
             credit_cost: number;
         };
-        scores: {
-            overall_quality: number | null;
-            score_fidelity: number | null;
-            score_alignment: number | null;
-            score_aesthetics: number | null;
-            curation_status: CurationStatus;
-            flaws: string | string[] | null;
-        };
+        scores: ScoreBreakdown;
         image: {
             file_path: string | null;
             upscale_url: string | null;
@@ -77,8 +87,8 @@
                 let valB: any;
 
                 if (sortBy === "score") {
-                    valA = a.scores.overall_quality || 0;
-                    valB = b.scores.overall_quality || 0;
+                    valA = a.scores.score_overall || 0;
+                    valB = b.scores.score_overall || 0;
                 } else {
                     valA = a[sortBy as keyof Row];
                     valB = b[sortBy as keyof Row];
@@ -123,16 +133,11 @@
     onMount(() => {
         fetchData();
         if (!browser) return;
-        const unsubscribe = afterNavigate(({ from }) => {
+        return afterNavigate(({ from }) => {
             if (from) {
                 fetchData();
             }
         });
-        return () => {
-            if (typeof unsubscribe === "function") {
-                unsubscribe();
-            }
-        };
     });
 </script>
 
@@ -334,10 +339,10 @@
                                     </div>
                                 </td>
                                 <td class="p-2 text-center">
-                                    {#if row.scores.overall_quality}
+                                    {#if row.scores.score_overall}
                                         <span
                                             class="font-pixel text-xl font-bold group-hover:text-yellow-300"
-                                            >{row.scores.overall_quality}</span
+                                            >{row.scores.score_overall}</span
                                         >
                                     {:else}
                                         <span class="opacity-20">-</span>
@@ -348,18 +353,19 @@
                                 >
                                     <span
                                         class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.score_fidelity || "-"}</span
-                                    >
-                                    <span class="opacity-30">/</span>
-                                    <span
-                                        class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.score_alignment ||
+                                        >{row.scores.score_facial_detail_realism ||
                                             "-"}</span
                                     >
                                     <span class="opacity-30">/</span>
                                     <span
                                         class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.score_aesthetics ||
+                                        >{row.scores.score_body_proportions ||
+                                            "-"}</span
+                                    >
+                                    <span class="opacity-30">/</span>
+                                    <span
+                                        class="opacity-60 group-hover:opacity-100"
+                                        >{row.scores.score_complexity_artistry ||
                                             "-"}</span
                                     >
                                 </td>
@@ -370,7 +376,7 @@
                                                 .curation_status === 'trash'
                                                 ? 'bg-red-600 text-white'
                                                 : row.scores.curation_status ===
-                                                      'keep'
+                                                      'use_again'
                                                   ? 'bg-blue-600 text-white'
                                                   : 'bg-yellow-400 text-black'}"
                                             >{row.scores.curation_status}</span

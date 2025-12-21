@@ -318,10 +318,12 @@
                     <div class="p-4 space-y-5">
                         <div class="flex flex-col gap-1">
                             <label
+                                for="experiment-name"
                                 class="text-[10px] font-bold uppercase text-gray-700"
                                 >Experiment Name (Optional)</label
                             >
                             <input
+                                id="experiment-name"
                                 bind:value={name}
                                 type="text"
                                 class="win95-input h-8 px-2"
@@ -346,7 +348,7 @@
                         <div
                             class="flex justify-between items-center text-[10px] font-bold uppercase text-gray-700"
                         >
-                            <label>Negative Prompt Null-Set</label>
+                            <span>Negative Prompt Null-Set</span>
                             <label
                                 class="flex items-center gap-1 cursor-pointer hover:text-win-purple"
                             >
@@ -380,12 +382,14 @@
                         <!-- Top Row: Model Selection (Full Width to avoid overlap) -->
                         <div class="flex flex-col gap-2">
                             <label
+                                for="model-select"
                                 class="text-[10px] font-bold uppercase text-gray-700 underline"
                                 >Inference Engine (Model)</label
                             >
                             <div class="flex flex-col sm:flex-row gap-4">
                                 <div class="flex-1 flex flex-col gap-2 min-w-0">
                                     <select
+                                        id="model-select"
                                         bind:value={modelId}
                                         class="win95-input h-10 px-1 text-xs w-full"
                                     >
@@ -465,18 +469,20 @@
                         >
                             <div class="space-y-4">
                                 <div class="flex flex-col gap-1">
-                                    <label
+                                    <span
                                         class="text-[10px] font-bold uppercase text-gray-700 underline"
-                                        >Resolution (WxH)</label
+                                        >Resolution (WxH)</span
                                     >
                                     <div class="grid grid-cols-2 gap-2">
                                         <input
+                                            id="resolution-width"
                                             bind:value={width}
                                             type="number"
                                             step="8"
                                             class="win95-input h-8 px-2 text-xs"
                                         />
                                         <input
+                                            id="resolution-height"
                                             bind:value={height}
                                             type="number"
                                             step="8"
@@ -486,11 +492,13 @@
                                 </div>
                                 <div class="flex flex-col gap-1">
                                     <label
+                                        for="images-per-call"
                                         class="text-[10px] font-bold uppercase text-gray-700 underline"
                                         >Images per Engine Call</label
                                     >
                                     <div class="flex items-center gap-4">
                                         <input
+                                            id="images-per-call"
                                             bind:value={numImages}
                                             type="range"
                                             min="1"
@@ -508,10 +516,12 @@
                             <div class="space-y-4">
                                 <div class="flex flex-col gap-1">
                                     <label
+                                        for="seed-input"
                                         class="text-[10px] font-bold uppercase text-gray-700 underline"
                                         >Seed Initialization</label
                                     >
                                     <input
+                                        id="seed-input"
                                         bind:value={seed}
                                         type="number"
                                         class="win95-input h-8 px-2 font-mono text-xs"
@@ -540,10 +550,12 @@
                         <div class="grid grid-cols-2 gap-8">
                             <div class="flex flex-col gap-1">
                                 <label
+                                    for="steps-stack"
                                     class="text-[10px] font-bold uppercase text-gray-700 underline"
                                     >Steps Stack</label
                                 >
                                 <input
+                                    id="steps-stack"
                                     bind:value={stepsInput}
                                     type="text"
                                     class="win95-input h-10 px-2 font-mono text-sm"
@@ -555,10 +567,12 @@
                             </div>
                             <div class="flex flex-col gap-1">
                                 <label
+                                    for="cfg-scale"
                                     class="text-[10px] font-bold uppercase text-gray-700 underline"
                                     >CFG_Scale Array</label
                                 >
                                 <input
+                                    id="cfg-scale"
                                     bind:value={scaleInput}
                                     type="text"
                                     class="win95-input h-10 px-2 font-mono text-sm"
@@ -567,9 +581,9 @@
                             </div>
                         </div>
                         <div class="flex flex-col gap-2">
-                            <label
+                            <span
                                 class="text-[10px] font-bold uppercase text-gray-700 underline"
-                                >Active Schedulers</label
+                                >Active Schedulers</span
                             >
                             <div class="flex flex-wrap gap-2">
                                 {#each schedulerOptions as s}
@@ -662,10 +676,12 @@
                                 </div>
                                 <div class="flex flex-col gap-1">
                                     <label
+                                        for="controlnet-select"
                                         class="text-[10px] font-bold uppercase"
                                         >ControlNet_Module</label
                                     >
                                     <select
+                                        id="controlnet-select"
                                         bind:value={controlnet}
                                         class="win95-input h-8 px-1 text-xs"
                                     >
@@ -698,10 +714,12 @@
                     <div class="p-4 flex flex-col gap-5 flex-1">
                         <div class="flex flex-col gap-1">
                             <label
+                                for="total-jobs"
                                 class="text-[10px] font-bold uppercase text-gray-700 underline"
                                 >Batch Run Count</label
                             >
                             <input
+                                id="total-jobs"
                                 bind:value={totalJobs}
                                 type="number"
                                 min="1"
