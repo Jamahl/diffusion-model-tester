@@ -31,6 +31,61 @@
     let modelOptions = $state<ModelOption[]>([]);
     let loadingModels = $state(true);
 
+    function normalizeScoresFromApi(apiScores: any, fallback?: any) {
+        return {
+            score_overall: apiScores?.score_overall ?? apiScores?.overall ?? fallback?.score_overall ?? null,
+            score_facial_detail_realism:
+                apiScores?.score_facial_detail_realism ??
+                apiScores?.facial_detail_realism ??
+                fallback?.score_facial_detail_realism ??
+                null,
+            score_body_proportions:
+                apiScores?.score_body_proportions ??
+                apiScores?.body_proportions ??
+                fallback?.score_body_proportions ??
+                null,
+            score_complexity_artistry:
+                apiScores?.score_complexity_artistry ??
+                apiScores?.complexity_artistry ??
+                fallback?.score_complexity_artistry ??
+                null,
+            score_composition_framing:
+                apiScores?.score_composition_framing ??
+                apiScores?.composition_framing ??
+                fallback?.score_composition_framing ??
+                null,
+            score_lighting_color:
+                apiScores?.score_lighting_color ??
+                apiScores?.lighting_color ??
+                fallback?.score_lighting_color ??
+                null,
+            score_resolution_clarity:
+                apiScores?.score_resolution_clarity ??
+                apiScores?.resolution_clarity ??
+                fallback?.score_resolution_clarity ??
+                null,
+            score_style_consistency:
+                apiScores?.score_style_consistency ??
+                apiScores?.style_consistency ??
+                fallback?.score_style_consistency ??
+                null,
+            score_prompt_adherence:
+                apiScores?.score_prompt_adherence ??
+                apiScores?.prompt_adherence ??
+                fallback?.score_prompt_adherence ??
+                null,
+            score_artifacts:
+                apiScores?.score_artifacts ??
+                apiScores?.artifacts ??
+                fallback?.score_artifacts ??
+                null,
+            use_again: apiScores?.use_again ?? fallback?.use_again ?? null,
+            flaws: apiScores?.flaws ?? fallback?.flaws ?? null,
+            curation_status:
+                apiScores?.curation_status ?? fallback?.curation_status ?? null,
+        };
+    }
+
     async function fetchModels() {
         try {
             const res = await fetch("http://localhost:8000/api/models");
@@ -220,7 +275,11 @@
                 `http://localhost:8000/api/images/${page.params.image_id}`,
             );
             if (!res.ok) throw new Error("Image not found");
-            image = await res.json();
+            const data = await res.json();
+            image = {
+                ...data,
+                scores: normalizeScoresFromApi(data?.scores, data?.scores),
+            };
             if (!image?.upscale_url) compareMode = false;
         } catch (e) {
             console.error("Failed to fetch image detail", e);
@@ -264,11 +323,11 @@
         if (!page.params.id) return;
         try {
             const res = await fetch(
-                `http://localhost:8000/api/images?run_id=${page.params.id}&limit=1000`,
+                `http://localhost:8000/api/images/ids?run_id=${page.params.id}`,
             );
             const data = await res.json();
-            if (data && data.images) {
-                allImageIds = data.images.map((img: any) => img.id);
+            if (data && Array.isArray(data.image_ids)) {
+                allImageIds = data.image_ids;
             }
         } catch (e) {
             console.error("Failed to fetch siblings", e);
@@ -289,7 +348,61 @@
             );
             const data = await res.json();
             if (res.ok) {
-                image.scores = { ...image.scores, ...data.scores };
+                // Backend returns keys without the score_ prefix; normalize to our state shape
+                const normalizedScores = {
+                    score_overall:
+                        data.scores?.overall ??
+                        payload.score_overall ??
+                        image.scores.score_overall,
+                    score_facial_detail_realism:
+                        data.scores?.facial_detail_realism ??
+                        payload.score_facial_detail_realism ??
+                        image.scores.score_facial_detail_realism,
+                    score_body_proportions:
+                        data.scores?.body_proportions ??
+                        payload.score_body_proportions ??
+                        image.scores.score_body_proportions,
+                    score_complexity_artistry:
+                        data.scores?.complexity_artistry ??
+                        payload.score_complexity_artistry ??
+                        image.scores.score_complexity_artistry,
+                    score_composition_framing:
+                        data.scores?.composition_framing ??
+                        payload.score_composition_framing ??
+                        image.scores.score_composition_framing,
+                    score_lighting_color:
+                        data.scores?.lighting_color ??
+                        payload.score_lighting_color ??
+                        image.scores.score_lighting_color,
+                    score_resolution_clarity:
+                        data.scores?.resolution_clarity ??
+                        payload.score_resolution_clarity ??
+                        image.scores.score_resolution_clarity,
+                    score_style_consistency:
+                        data.scores?.style_consistency ??
+                        payload.score_style_consistency ??
+                        image.scores.score_style_consistency,
+                    score_prompt_adherence:
+                        data.scores?.prompt_adherence ??
+                        payload.score_prompt_adherence ??
+                        image.scores.score_prompt_adherence,
+                    score_artifacts:
+                        data.scores?.artifacts ??
+                        payload.score_artifacts ??
+                        image.scores.score_artifacts,
+                    use_again: data.scores?.use_again ?? payload.use_again ?? image.scores.use_again,
+                    flaws: data.scores?.flaws ?? payload.flaws ?? image.scores.flaws,
+                    curation_status:
+                        data.scores?.curation_status ??
+                        payload.curation_status ??
+                        image.scores.curation_status,
+                };
+                image = {
+                    ...image,
+                    scores: { ...image.scores, ...normalizedScores },
+                };
+                // Ensure reactive refresh aligns with backend
+                await fetchDetail();
             } else {
                 toasts.error("Failed to save score");
             }
@@ -380,7 +493,7 @@
     });
 </script>
 
-<div class="flex h-full overflow-hidden font-mono bg-[#d4d0c8]">
+<div class="flex h-screen overflow-hidden font-mono bg-[#d4d0c8]">
     {#if loading}
         <div class="flex-1 flex items-center justify-center">
             <span class="loading loading-spinner loading-lg text-win-purple"
@@ -389,7 +502,8 @@
     {:else if image}
         <!-- Left Side: Main View Window -->
         <div
-            class="flex-1 flex flex-col h-full overflow-hidden border-r-2 border-white"
+            class="flex-1 min-w-0 flex flex-col h-full overflow-hidden border-r-2 border-white bg-[#d4d0c8]"
+            style="max-width: calc(100vw - 360px)"
         >
             <div class="win95-title-bar shrink-0">
                 <span class="flex items-center gap-2"
@@ -414,8 +528,77 @@
                 </div>
             </div>
 
+            <!-- Top Controls -->
+            <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-[#e2e0da] border-b-2 border-white">
+                <div class="flex gap-2">
+                    <a
+                        href="/runs/{page.params.id}"
+                        class="win95-btn h-9 px-3 text-[10px] font-bold uppercase flex items-center gap-2 bg-white no-underline text-black"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">grid_view</span>
+                        Gallery
+                    </a>
+                    <button
+                        onclick={navigateNext}
+                        class="win95-btn h-9 px-3 text-[10px] font-bold uppercase flex items-center gap-2 bg-win-purple text-white"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                        Next
+                    </button>
+                    <button
+                        onclick={() => {
+                            if (!image) return;
+                            window.open(
+                                getImageUrl(image.upscale_url || image.file_path),
+                                "_blank",
+                            );
+                        }}
+                        class="win95-btn h-9 px-3 text-[10px] font-bold uppercase flex items-center gap-2 bg-white"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                        Full Screen
+                    </button>
+                </div>
+                <div class="flex gap-2 items-center">
+                    {#if image.upscale_url}
+                        <button
+                            onclick={() => (compareMode = !compareMode)}
+                            class="win95-btn h-9 px-4 text-[10px] font-bold uppercase flex items-center gap-2 {compareMode
+                                ? 'bg-win-magenta text-white'
+                                : 'bg-white'}"
+                        >
+                            <span class="material-symbols-outlined text-[16px]">
+                                {compareMode ? "visibility_off" : "compare"}
+                            </span>
+                            {compareMode ? "Exit Diff" : "Compare View"}
+                        </button>
+                    {/if}
+                    <button
+                        onclick={navigatePrev}
+                        disabled={currentIndex === 0}
+                        class="win95-btn h-9 px-3 text-[10px] font-bold uppercase flex items-center gap-2 {currentIndex === 0
+                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            : 'bg-white'}"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">chevron_left</span>
+                        Prev
+                    </button>
+                    <button
+                        onclick={navigateNext}
+                        disabled={currentIndex === allImageIds.length - 1}
+                        class="win95-btn h-9 px-3 text-[10px] font-bold uppercase flex items-center gap-2 {currentIndex ===
+                        allImageIds.length - 1
+                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            : 'bg-white'}"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+                        Next
+                    </button>
+                </div>
+            </div>
+
             <div
-                class="flex-1 relative flex items-center justify-center p-8 bg-checkered min-h-0"
+                class="flex-1 min-w-0 relative flex items-center justify-center p-4 md:p-6 bg-checkered min-h-0"
             >
                 {#if compareMode && image.upscale_url}
                     <div class="grid grid-cols-2 gap-4 h-full w-full">
@@ -462,7 +645,8 @@
                     </div>
                 {:else}
                     <div
-                        class="flex-1 win95-inset bg-black/10 flex items-center justify-center overflow-hidden relative"
+                        class="flex-1 win95-inset bg-black/10 flex items-center justify-center overflow-hidden relative max-w-full"
+                        style="height: calc(100vh - 190px); max-height: calc(100vh - 190px); max-width: calc(100vw - 420px); width: 100%"
                     >
                         <img
                             src={getImageUrl(
@@ -471,7 +655,7 @@
                                     : image.upscale_url,
                             )}
                             alt="Generated artwork"
-                            class="object-contain max-h-[80vh] w-full drop-shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+                            class="object-contain max-h-full max-w-full w-auto h-auto drop-shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
                         />
 
                         <!-- Floating score badge -->
@@ -486,53 +670,6 @@
                         >
                         </div>
 
-                        <!-- Desktop vertical scoring rail -->
-                        <div
-                            class="hidden xl:flex flex-col gap-1 absolute top-1/2 -translate-y-1/2 right-6 bg-black/60 backdrop-blur-md border border-white p-2 rounded-xl shadow-[0_12px_30px_rgba(0,0,0,0.6)]"
-                        >
-                            <span
-                                class="text-[8px] uppercase text-white/80 tracking-[0.3em] mb-1 text-center"
-                                >Set Score</span
-                            >
-                            {#each qualityScale as value}
-                                <button
-                                    onclick={() => handlePanelQuality(value)}
-                                    class="w-10 h-10 flex items-center justify-center font-pixel text-lg border border-white transition-none {image
-                                        .scores.score_overall === value
-                                        ? 'bg-win-magenta text-white'
-                                        : 'bg-[#c0c0c0] text-black hover:bg-white'}"
-                                    aria-label={`Set quality ${value}`}
-                                >
-                                    {value}
-                                </button>
-                            {/each}
-                        </div>
-
-                        <!-- Mobile scoring bar -->
-                        <div
-                            class="xl:hidden absolute inset-x-4 bottom-6 bg-black/65 backdrop-blur-md border border-white rounded-lg p-2 shadow-[0_8px_30px_rgba(0,0,0,0.6)]"
-                        >
-                            <div
-                                class="flex justify-between items-center text-[8px] uppercase text-white/70 mb-1"
-                            >
-                                <span>Tap to Rate</span>
-                                <span>{image.scores.score_overall || "--"}</span>
-                            </div>
-                            <div class="flex flex-wrap gap-1 justify-center">
-                                {#each qualityScale as value}
-                                    <button
-                                        onclick={() => handlePanelQuality(value)}
-                                        class="w-8 h-8 flex items-center justify-center font-bold border border-white text-[10px] {image
-                                            .scores.score_overall === value
-                                            ? 'bg-win-magenta text-white'
-                                            : 'bg-[#c0c0c0] text-black hover:bg-white'}"
-                                        aria-label={`Set quality ${value}`}
-                                    >
-                                        {value}
-                                    </button>
-                                {/each}
-                            </div>
-                        </div>
                     </div>
                 {/if}
 
@@ -562,183 +699,7 @@
                 </button>
             </div>
 
-            <!-- Scoring Bar -->
-            <div class="win95-window m-4 p-1 mt-0 shrink-0">
-                <div class="flex flex-col gap-3 p-2">
-                    <div class="flex flex-wrap items-center justify-between gap-4">
-                        <div class="flex items-center gap-3 pl-1">
-                            <div class="flex items-center gap-3">
-                                <span
-                                    class="text-[10px] font-bold uppercase tracking-widest text-win-purple"
-                                    >Quality:</span
-                                >
-                                <span
-                                    class="win95-inset bg-white px-3 py-1 text-2xl font-pixel text-win-magenta min-w-[64px] text-center"
-                                >
-                                    {image.scores.score_overall || "--"}
-                                </span>
-                            </div>
-                            <label
-                                class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide cursor-pointer"
-                            >
-                                <input
-                                    type="checkbox"
-                                    bind:checked={autoAdvance}
-                                    class="w-4 h-4 accent-win-magenta"
-                                />
-                                <span>Auto-advance</span>
-                            </label>
-                        </div>
-                        <div class="flex gap-2 pr-1">
-                            <a
-                                href="/runs/{page.params.id}"
-                                class="win95-btn h-8 px-3 text-[10px] font-bold uppercase flex items-center gap-2 bg-white no-underline text-black"
-                            >
-                                <span class="material-symbols-outlined text-[16px]"
-                                    >grid_view</span
-                                >
-                                Gallery
-                            </a>
-                            <button
-                                onclick={navigateNext}
-                                class="win95-btn h-8 px-3 text-[10px] font-bold uppercase flex items-center gap-2 bg-win-purple text-white"
-                            >
-                                <span class="material-symbols-outlined text-[16px]"
-                                    >arrow_forward</span
-                                >
-                                Next
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <div class="flex gap-2">
-                            {#each qualityScale as value}
-                                <button
-                                    onclick={() => handlePanelQuality(value)}
-                                    class="w-10 h-10 flex items-center justify-center font-pixel text-lg border border-white transition-none {image
-                                        .scores.score_overall === value
-                                        ? 'bg-win-magenta text-white'
-                                        : 'bg-[#c0c0c0] text-black hover:bg-white'}"
-                                >
-                                    {value}
-                                </button>
-                            {/each}
-                        </div>
-                        <div class="flex gap-2">
-                            {#if image.upscale_url}
-                                <button
-                                    onclick={() => (compareMode = !compareMode)}
-                                    class="win95-btn h-8 px-4 text-[10px] font-bold uppercase flex items-center gap-2 {compareMode
-                                        ? 'bg-win-magenta text-white'
-                                        : 'bg-white'}"
-                                >
-                                    <span
-                                        class="material-symbols-outlined text-[16px]"
-                                        >{compareMode
-                                            ? "visibility_off"
-                                            : "compare"}</span
-                                    >
-                                    {compareMode ? "Exit Diff" : "Compare View"}
-                                </button>
-                            {/if}
-                            <button
-                                onclick={() => {
-                                    if (!image) return;
-                                    window.open(
-                                        getImageUrl(
-                                            image.upscale_url ||
-                                                image.file_path,
-                                        ),
-                                        "_blank",
-                                    );
-                                }}
-                                class="win95-btn h-8 px-4 text-[10px] font-bold uppercase flex items-center gap-2 bg-white"
-                            >
-                                <span class="material-symbols-outlined text-[16px]"
-                                    >open_in_new</span
-                                > Full Screen
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Enhance Section (moved out of inspector) -->
-            <div class="win95-window mx-4 mb-4 p-1">
-                <div
-                    class="bg-teal-700 text-white px-2 py-0.5 text-[9px] font-bold uppercase flex justify-between items-center mb-2"
-                >
-                    <span>UPSCALER_ENGINE.DLL</span>
-                    <span class="material-symbols-outlined text-[14px]">auto_fix_high</span>
-                </div>
-                <div class="p-3 flex flex-col gap-4">
-                    <div
-                        class="flex border-2 border-[#808080] border-b-white border-r-white bg-white p-[1px]"
-                    >
-                        <button
-                            onclick={() => (upscaleType = "esrgan")}
-                            class="flex-1 h-7 text-[9px] font-bold uppercase transition-none {upscaleType ===
-                            'esrgan'
-                                ? 'bg-win-purple text-white'
-                                : 'bg-white text-black hover:bg-gray-100'}"
-                        >
-                            ESRGAN
-                        </button>
-                        <button
-                            onclick={() => (upscaleType = "hires_fix")}
-                            class="flex-1 h-7 text-[9px] font-bold uppercase transition-none {upscaleType ===
-                            'hires_fix'
-                                ? 'bg-win-purple text-white'
-                                : 'bg-white text-black hover:bg-gray-100'}"
-                        >
-                            Hires Fix
-                        </button>
-                    </div>
-                    {#if upscaleType === "esrgan"}
-                        <div class="flex flex-col gap-1">
-                            <span class="text-[10px] font-bold uppercase"
-                                >Mult: {upscaleScale}x</span
-                            >
-                            <input
-                                type="range"
-                                min="2"
-                                max="4"
-                                step="0.5"
-                                bind:value={upscaleScale}
-                                class="range-retro"
-                            />
-                        </div>
-                    {:else}
-                        <div class="flex flex-col gap-1">
-                            <span class="text-[10px] font-bold uppercase"
-                                >Str: {upscaleStrength}</span
-                            >
-                            <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.1"
-                                bind:value={upscaleStrength}
-                                class="range-retro"
-                            />
-                        </div>
-                    {/if}
-                    <button
-                        onclick={handleUpscale}
-                        disabled={upscaling}
-                        class="win95-btn w-full h-10 bg-win-magenta text-white font-bold uppercase text-xs flex items-center justify-center gap-2"
-                    >
-                        {#if upscaling}
-                            <span class="loading loading-spinner h-4 w-4"></span>
-                            WORKING...
-                        {:else}
-                            <span class="material-symbols-outlined text-[20px]">bolt</span>
-                            Initiate Upscale
-                        {/if}
-                    </button>
-                </div>
-            </div>
+            <div class="px-4 pb-4 pt-4 flex flex-col gap-4 border-t-2 border-white bg-[#d4d0c8]"></div>
         </div>
 
         <!-- Right Side: Meta Panel -->
@@ -777,6 +738,61 @@
             <div
                 class="flex-1 overflow-y-auto p-4 flex flex-col gap-6 custom-scrollbar"
             >
+                <!-- Upscaler Dropdown -->
+                <div class="win95-window p-2 bg-white">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-bold uppercase text-gray-700">Upscaler</span>
+                        <span class="material-symbols-outlined text-[14px] text-gray-500">auto_fix_high</span>
+                    </div>
+                    <div class="flex flex-col gap-2 text-[10px]">
+                        <select
+                            bind:value={upscaleType}
+                            class="win95-inset bg-white border border-gray-400 px-2 py-1 uppercase font-bold text-[10px]"
+                        >
+                            <option value="esrgan">ESRGAN</option>
+                            <option value="hires_fix">Hires Fix</option>
+                        </select>
+                        {#if upscaleType === "esrgan"}
+                            <label class="flex flex-col gap-1">
+                                <span class="uppercase font-bold opacity-70">Mult: {upscaleScale}x</span>
+                                <input
+                                    type="range"
+                                    min="2"
+                                    max="4"
+                                    step="0.5"
+                                    bind:value={upscaleScale}
+                                    class="range-retro"
+                                />
+                            </label>
+                        {:else}
+                            <label class="flex flex-col gap-1">
+                                <span class="uppercase font-bold opacity-70">Str: {upscaleStrength}</span>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    bind:value={upscaleStrength}
+                                    class="range-retro"
+                                />
+                            </label>
+                        {/if}
+                        <button
+                            onclick={handleUpscale}
+                            disabled={upscaling}
+                            class="win95-btn w-full h-10 bg-win-magenta text-white font-bold uppercase text-xs flex items-center justify-center gap-2"
+                        >
+                            {#if upscaling}
+                                <span class="loading loading-spinner h-4 w-4"></span>
+                                WORKING...
+                            {:else}
+                                <span class="material-symbols-outlined text-[20px]">bolt</span>
+                                Initiate Upscale
+                            {/if}
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Score Summary -->
                 <div class="win95-window p-1 bg-win-purple text-white">
                     <div class="p-4 flex flex-col items-center gap-2">
@@ -806,15 +822,32 @@
 
                     <div class="grid grid-cols-1 gap-3">
                         {#each scoreBlocks as block}
+                            {@const tooltipId = `${block.key}-tip`}
                             <div class="bg-white/80 border border-gray-300 p-2 flex flex-col gap-2">
                                 <div class="flex justify-between items-center text-[10px] font-bold uppercase">
                                     <div class="flex items-center gap-2 text-gray-600">
-                                        <span>{block.label}</span>
-                                        <span
-                                            class="material-symbols-outlined text-[12px] opacity-40 cursor-help"
-                                            title={block.help}
-                                            >info</span
+                                        <button
+                                            type="button"
+                                            class="tooltip-trigger"
+                                            aria-describedby={tooltipId}
                                         >
+                                            <span>{block.label}</span>
+                                            <span
+                                                class="material-symbols-outlined text-[12px] opacity-40"
+                                                aria-hidden="true"
+                                                >info</span
+                                            >
+                                            <span class="sr-only"
+                                                >Help for {block.label}</span
+                                            >
+                                            <div
+                                                id={tooltipId}
+                                                role="tooltip"
+                                                class="tooltip-panel w-56 text-[9px]"
+                                            >
+                                                {block.help}
+                                            </div>
+                                        </button>
                                     </div>
                                     <span class="font-pixel text-blue-700 text-base"
                                         >{image?.scores?.[block.key] || "--"}</span
@@ -904,9 +937,11 @@
                                     image?.scores?.use_again === option.id}
                                 <button
                                     onclick={() => handleUseAgain(option.id)}
-                                    class="flex flex-col items-center justify-center gap-1 border text-[9px] font-bold uppercase py-2 px-1 transition-none {isSelected
-                                        ? 'bg-win-magenta text-white border-black shadow-[inset_1px_1px_0_rgba(0,0,0,0.3)]'
-                                        : 'bg-gray-100 text-gray-600 border-white border-b-gray-400 border-r-gray-400 hover:bg-white hover:text-black'}"
+                                    type="button"
+                                    aria-describedby={`use-again-${option.id}-tip`}
+                                    class="tooltip-trigger flex flex-col items-center justify-center gap-1 border-2 text-[9px] font-bold uppercase py-2 px-1 transition-none {isSelected
+                                        ? 'bg-green-500 text-white border-green-700 shadow-[0_0_8px_2px_rgba(34,197,94,0.6),inset_0_1px_0_rgba(255,255,255,0.3)] scale-105'
+                                        : 'bg-white text-gray-700 border-gray-300 hover:border-black hover:text-black hover:bg-gray-50'}"
                                 >
                                     <span
                                         class="material-symbols-outlined text-[14px]"
@@ -915,6 +950,16 @@
                                     <span class="text-[8px] text-center"
                                         >{option.label}</span
                                     >
+                                    <span class="sr-only"
+                                        >{option.tooltip}</span
+                                    >
+                                    <div
+                                        id={`use-again-${option.id}-tip`}
+                                        role="tooltip"
+                                        class="tooltip-panel text-[9px] w-40"
+                                    >
+                                        {option.tooltip}
+                                    </div>
                                 </button>
                             {/each}
                         </div>
@@ -1033,33 +1078,6 @@
                 </div>
             </div>
 
-            <!-- Terminal Keyboard Help -->
-            <div class="p-2 bg-[#d4d0c8] border-t-2 border-white">
-                <div
-                    class="flex items-center justify-between bg-black px-2 py-1 mb-1"
-                >
-                    <span class="text-[9px] text-white font-bold"
-                        >HOTKEYS.SYS</span
-                    >
-                    <span
-                        class="material-symbols-outlined text-green-400 text-[14px]"
-                        >keyboard</span
-                    >
-                </div>
-                <div
-                    class="bg-black p-3 font-mono text-[9px] text-green-500 leading-tight border-2 border-black win95-inset"
-                >
-                    <div class="grid grid-cols-2 gap-y-2">
-                        <span>[ARROW_LEFT/RIGHT]</span>
-                        <span class="text-white">NAVIGATE</span>
-                        <span>[KEYS_1-0]</span>
-                        <span class="text-white">SET_QUALITY</span>
-                        <span>[KEY_C]</span>
-                        <span class="text-white">TOGGLE_COMPARE</span>
-                    </div>
-                    <p class="mt-3 opacity-40 italic">// AUTO_SAVE: ON</p>
-                </div>
-            </div>
         </div>
     {/if}
 </div>
@@ -1100,5 +1118,55 @@
         border-right-color: #404040;
         border-bottom-color: #404040;
         box-shadow: 1px 1px 0 0 black;
+    }
+
+    .tooltip-trigger {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.15rem;
+        cursor: help;
+        color: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+    }
+
+    .tooltip-trigger:focus-visible {
+        outline: 2px dashed #7b5fb2;
+        outline-offset: 2px;
+    }
+
+    .tooltip-panel {
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 0;
+        background: #ffffe0;
+        color: #1a1a1a;
+        border: 1px solid #000;
+        padding: 0.35rem 0.5rem;
+        box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+        text-transform: none;
+        font-weight: normal;
+        z-index: 30;
+        width: 12rem;
+        display: none;
+    }
+
+    .tooltip-trigger:hover .tooltip-panel,
+    .tooltip-trigger:focus .tooltip-panel,
+    .tooltip-trigger:focus-visible .tooltip-panel {
+        display: block;
+    }
+
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
     }
 </style>

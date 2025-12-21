@@ -52,6 +52,7 @@ interface ScoreBreakdown {
     let search = $state("");
     let sortBy = $state<keyof Row | "score">("batch");
     let sortOrder = $state<"asc" | "desc">("desc");
+    let ratingFilter = $state<"all" | "rated" | "unrated">("all");
 
     // Hover Preview State
     let hoveredRow = $state<Row | null>(null);
@@ -61,11 +62,75 @@ interface ScoreBreakdown {
         mousePos = { x: e.clientX, y: e.clientY };
     }
 
+    function normalizeScores(scores: any): ScoreBreakdown {
+        return {
+            score_overall: scores?.score_overall ?? scores?.overall ?? null,
+            score_facial_detail_realism:
+                scores?.score_facial_detail_realism ??
+                scores?.facial_detail_realism ??
+                null,
+            score_body_proportions:
+                scores?.score_body_proportions ?? scores?.body_proportions ?? null,
+            score_complexity_artistry:
+                scores?.score_complexity_artistry ??
+                scores?.complexity_artistry ??
+                null,
+            score_composition_framing:
+                scores?.score_composition_framing ??
+                scores?.composition_framing ??
+                null,
+            score_lighting_color:
+                scores?.score_lighting_color ?? scores?.lighting_color ?? null,
+            score_resolution_clarity:
+                scores?.score_resolution_clarity ??
+                scores?.resolution_clarity ??
+                null,
+            score_style_consistency:
+                scores?.score_style_consistency ??
+                scores?.style_consistency ??
+                null,
+            score_prompt_adherence:
+                scores?.score_prompt_adherence ??
+                scores?.prompt_adherence ??
+                null,
+            score_artifacts: scores?.score_artifacts ?? scores?.artifacts ?? null,
+            use_again: scores?.use_again ?? null,
+            curation_status: scores?.curation_status ?? null,
+            flaws: scores?.flaws ?? null,
+        };
+    }
+
+    function averageSubScores(scores: ScoreBreakdown): number | null {
+        const values = [
+            scores.score_facial_detail_realism,
+            scores.score_body_proportions,
+            scores.score_complexity_artistry,
+            scores.score_composition_framing,
+            scores.score_lighting_color,
+            scores.score_resolution_clarity,
+            scores.score_style_consistency,
+            scores.score_prompt_adherence,
+            scores.score_artifacts,
+        ]
+            .map((v) => (v == null ? null : Number(v)))
+            .filter((v): v is number => Number.isFinite(v));
+
+        if (!values.length) return null;
+        const avg = values.reduce((a, b) => a + b, 0) / values.length;
+        return Number(avg.toFixed(1));
+    }
+
     async function fetchData() {
         try {
             loading = true;
             const res = await fetch("http://localhost:8000/api/analysis/table");
-            rows = await res.json();
+            const data = await res.json();
+            rows = Array.isArray(data)
+                ? data.map((row) => ({
+                      ...row,
+                      scores: normalizeScores(row.scores),
+                  }))
+                : [];
         } catch (e) {
             console.error("Failed to fetch analysis data", e);
         } finally {
@@ -75,13 +140,18 @@ interface ScoreBreakdown {
 
     const filteredRows = $derived(
         rows
-            .filter(
-                (r: Row) =>
+            .filter((r: Row) => {
+                const matchesText =
                     r.prompt.toLowerCase().includes(search.toLowerCase()) ||
                     r.run_name.toLowerCase().includes(search.toLowerCase()) ||
                     r.model_id.toLowerCase().includes(search.toLowerCase()) ||
-                    r.batch.toString().includes(search),
-            )
+                    r.batch.toString().includes(search);
+                const matchesRating =
+                    ratingFilter === "all" ||
+                    (ratingFilter === "rated" && r.image.is_rated) ||
+                    (ratingFilter === "unrated" && !r.image.is_rated);
+                return matchesText && matchesRating;
+            })
             .sort((a: Row, b: Row) => {
                 let valA: any;
                 let valB: any;
@@ -180,7 +250,33 @@ interface ScoreBreakdown {
                 &gt;_ Comparing parameter stacks and adherence metrics
             </p>
         </div>
-        <div class="flex gap-2 w-full md:w-auto">
+        <div class="flex gap-2 w-full md:w-auto flex-wrap items-center">
+            <div class="flex gap-1">
+                <button
+                    class="win95-btn h-8 px-3 text-[10px] font-bold uppercase {ratingFilter === 'all'
+                        ? 'bg-win-purple text-white'
+                        : 'bg-white text-black'}"
+                    onclick={() => (ratingFilter = "all")}
+                >
+                    All
+                </button>
+                <button
+                    class="win95-btn h-8 px-3 text-[10px] font-bold uppercase {ratingFilter === 'rated'
+                        ? 'bg-win-purple text-white'
+                        : 'bg-white text-black'}"
+                    onclick={() => (ratingFilter = "rated")}
+                >
+                    Rated
+                </button>
+                <button
+                    class="win95-btn h-8 px-3 text-[10px] font-bold uppercase {ratingFilter === 'unrated'
+                        ? 'bg-win-purple text-white'
+                        : 'bg-white text-black'}"
+                    onclick={() => (ratingFilter = "unrated")}
+                >
+                    Unrated
+                </button>
+            </div>
             <div class="relative flex-1 md:flex-none">
                 <input
                     type="text"
@@ -250,9 +346,14 @@ interface ScoreBreakdown {
                                         : "↓"
                                     : ""}
                             </th>
-                            <th class="p-2 border-r border-gray-400 text-center"
-                                >RLHF (F/A/Ae)</th
-                            >
+                            <th class="p-2 border-r border-gray-400 text-center">
+                                <span class="tooltip-trigger cursor-help">
+                                    Avg Score
+                                    <div class="tooltip-panel text-[9px] w-48">
+                                        Average of all sub-scores (excluding overall).
+                                    </div>
+                                </span>
+                            </th>
                             <th class="p-2 border-r border-gray-400 text-center"
                                 >Curation</th
                             >
@@ -348,26 +449,14 @@ interface ScoreBreakdown {
                                         <span class="opacity-20">-</span>
                                     {/if}
                                 </td>
-                                <td
-                                    class="p-2 text-center text-[10px] font-bold"
-                                >
-                                    <span
-                                        class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.score_facial_detail_realism ||
-                                            "-"}</span
-                                    >
-                                    <span class="opacity-30">/</span>
-                                    <span
-                                        class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.score_body_proportions ||
-                                            "-"}</span
-                                    >
-                                    <span class="opacity-30">/</span>
-                                    <span
-                                        class="opacity-60 group-hover:opacity-100"
-                                        >{row.scores.score_complexity_artistry ||
-                                            "-"}</span
-                                    >
+                                <td class="p-2 text-center text-[10px] font-bold">
+                                    {#if averageSubScores(row.scores) !== null}
+                                        <span class="font-pixel text-base group-hover:text-yellow-300">
+                                            {averageSubScores(row.scores)}
+                                        </span>
+                                    {:else}
+                                        <span class="opacity-20">-</span>
+                                    {/if}
                                 </td>
                                 <td class="p-2 text-center">
                                     {#if row.scores.curation_status}
