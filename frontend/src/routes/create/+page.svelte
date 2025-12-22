@@ -15,7 +15,7 @@
     let prompt = $state("");
     let negativePrompt = $state("");
     let useDefaultNeg = $state(true);
-    let modelId = $state("yBG2r9O");
+    let modelId = $state("mGYMaD5");
     let width = $state(512);
     let height = $state(768);
     let numImages = $state(4);
@@ -236,8 +236,7 @@
                     use_default_neg: item.useDefaultNeg,
                     init_image_asset_id: item.initImageAssetId,
                     image_strength: item.imageStrength,
-                    controlnet:
-                        item.controlnet === "none" ? null : item.controlnet,
+                    controlnet: item.controlnet === "none" ? null : item.controlnet,
                 };
 
                 const res = await fetch("http://localhost:8000/api/runs", {
@@ -246,7 +245,19 @@
                     body: JSON.stringify(payload),
                 });
 
-                if (!res.ok) throw new Error("Failed to create run");
+                if (!res.ok) {
+                    let detail = "Failed to create run";
+                    try {
+                        const err = await res.json();
+                        detail = err.detail || detail;
+                    } catch {
+                        // ignore parse error
+                    }
+                    throw new Error(
+                        `Failed to create batch "${item.name || "UNNAMED_BATCH"}": ${detail}`,
+                    );
+                }
+
                 executionProgress.current++;
             }
 
@@ -301,6 +312,35 @@
         </div>
     </div>
 
+<style>
+    .tooltip-trigger {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .tooltip-panel {
+        display: none;
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        background: #ffffe0;
+        color: #1a1a1a;
+        border: 1px solid #000;
+        padding: 0.35rem 0.5rem;
+        box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+        text-transform: none;
+        font-weight: normal;
+        z-index: 20;
+    }
+
+    .tooltip-trigger:hover .tooltip-panel,
+    .tooltip-trigger:focus .tooltip-panel,
+    .tooltip-trigger:focus-visible .tooltip-panel {
+        display: block;
+    }
+</style>
     <div class="flex-1 overflow-y-auto p-6 custom-scrollbar bg-checkered">
         <div class="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6">
             <!-- Left Panel: Configuration Form -->
@@ -473,6 +513,9 @@
                                         class="text-[10px] font-bold uppercase text-gray-700 underline"
                                         >Resolution (WxH)</span
                                     >
+                                    <span class="text-[9px] text-gray-600 italic">
+                                        Suggestions: Instagram feed portrait 896×672, Stories 504×896, Square 896×896
+                                    </span>
                                     <div class="grid grid-cols-2 gap-2">
                                         <input
                                             id="resolution-width"
@@ -788,16 +831,46 @@
                                                 )}
                                             </div>
                                         </div>
-                                        <button
-                                            onclick={() =>
-                                                removeFromQueue(item.id)}
-                                            class="text-red-700 hover:bg-red-50 p-1"
-                                        >
-                                            <span
-                                                class="material-symbols-outlined text-[16px]"
-                                                >delete</span
+                                        <div class="flex flex-col items-end gap-1">
+                                            <button
+                                                class="tooltip-trigger text-gray-600 hover:text-black p-1"
+                                                aria-label="View config"
+                                                type="button"
                                             >
-                                        </button>
+                                                <span class="material-symbols-outlined text-[16px]">info</span>
+                                                <div
+                                                    class="tooltip-panel text-[9px] w-60 text-left"
+                                                    style="right: 0;"
+                                                >
+                                                    <div class="font-bold uppercase text-[8px] mb-1 text-gray-700">
+                                                        Config
+                                                    </div>
+                                                    <div class="space-y-1">
+                                                        <div><span class="font-bold">Model:</span> {item.modelTitle || item.modelId}</div>
+                                                        <div><span class="font-bold">Size:</span> {item.width}×{item.height}</div>
+                                                        <div><span class="font-bold">Steps:</span> {item.stepsInput}</div>
+                                                        <div><span class="font-bold">CFG:</span> {item.scaleInput}</div>
+                                                        <div><span class="font-bold">Schedulers:</span> {item.selectedSchedulers.join(", ")}</div>
+                                                        <div><span class="font-bold">Images/call:</span> {item.numImages}</div>
+                                                        <div><span class="font-bold">Total jobs:</span> {item.totalJobs}</div>
+                                                        <div><span class="font-bold">Seed:</span> {item.seed}</div>
+                                                        <div><span class="font-bold">Use default neg:</span> {item.useDefaultNeg ? "Yes" : "No"}</div>
+                                                        {#if item.controlnet && item.controlnet !== "none"}
+                                                            <div><span class="font-bold">ControlNet:</span> {item.controlnet}</div>
+                                                        {/if}
+                                                        {#if item.initImageAssetId}
+                                                            <div><span class="font-bold">Init image:</span> attached</div>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                            <button
+                                                onclick={() => removeFromQueue(item.id)}
+                                                class="text-red-700 hover:bg-red-50 p-1"
+                                            >
+                                                <span class="material-symbols-outlined text-[16px]">delete</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 {/each}
                                 {#if queuedItems.length === 0}

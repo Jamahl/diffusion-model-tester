@@ -30,12 +30,23 @@ async def export_csv(db: Session = Depends(get_db)):
     
     # Define CSV columns
     fieldnames = [
-        "run_id", "batch", "run_name", "created_at", "model_id", 
-        "prompt", "negative_prompt", "steps", "scale", "width", 
-        "height", "seed", "scheduler", "overall_quality", 
-        "anatomy_score", "prompt_adherence", "background_score", 
-        "use_again", "image_id", "file_path", "upscale_url", "credit_cost",
-        "score_fidelity", "score_alignment", "score_aesthetics", "flaws", "curation_status"
+        "run_id", "batch", "run_name", "created_at", "model_id",
+        "prompt", "negative_prompt", "steps", "scale", "width",
+        "height", "seed", "scheduler",
+        "score_overall",
+        "score_facial_detail_realism",
+        "score_body_proportions",
+        "score_complexity_artistry",
+        "score_composition_framing",
+        "score_lighting_color",
+        "score_resolution_clarity",
+        "score_style_consistency",
+        "score_prompt_adherence",
+        "score_artifacts",
+        "use_again",
+        "curation_status",
+        "image_id", "file_path", "upscale_url", "credit_cost",
+        "flaws"
     ]
     
     output = io.StringIO()
@@ -57,20 +68,23 @@ async def export_csv(db: Session = Depends(get_db)):
             "height": config.height if config else "",
             "seed": config.seed if config else "",
             "scheduler": config.scheduler if config else "",
-            "overall_quality": image.overall_quality if image.overall_quality is not None else "",
-            "anatomy_score": image.anatomy_score if image.anatomy_score is not None else "",
-            "prompt_adherence": image.prompt_adherence if image.prompt_adherence is not None else "",
-            "background_score": image.background_score if image.background_score is not None else "",
+            "score_overall": image.score_overall if image.score_overall is not None else "",
+            "score_facial_detail_realism": image.score_facial_detail_realism if image.score_facial_detail_realism is not None else "",
+            "score_body_proportions": image.score_body_proportions if image.score_body_proportions is not None else "",
+            "score_complexity_artistry": image.score_complexity_artistry if image.score_complexity_artistry is not None else "",
+            "score_composition_framing": image.score_composition_framing if image.score_composition_framing is not None else "",
+            "score_lighting_color": image.score_lighting_color if image.score_lighting_color is not None else "",
+            "score_resolution_clarity": image.score_resolution_clarity if image.score_resolution_clarity is not None else "",
+            "score_style_consistency": image.score_style_consistency if image.score_style_consistency is not None else "",
+            "score_prompt_adherence": image.score_prompt_adherence if image.score_prompt_adherence is not None else "",
+            "score_artifacts": image.score_artifacts if image.score_artifacts is not None else "",
             "use_again": image.use_again.value if image.use_again else "",
+            "curation_status": image.curation_status if image.curation_status else "",
             "image_id": image.id,
             "file_path": image.file_path,
             "upscale_url": image.upscale_url,
             "credit_cost": config.credit_cost if config else 0,
-            "score_fidelity": image.score_fidelity if image.score_fidelity is not None else "",
-            "score_alignment": image.score_alignment if image.score_alignment is not None else "",
-            "score_aesthetics": image.score_aesthetics if image.score_aesthetics is not None else "",
             "flaws": image.flaws if image.flaws else "",
-            "curation_status": image.curation_status if image.curation_status else ""
         })
     
     response = StreamingResponse(
@@ -116,21 +130,25 @@ async def get_analysis_table(db: Session = Depends(get_db)):
                 "credit_cost": config.credit_cost if config else 0,
             },
             "scores": {
-                "overall_quality": image.overall_quality,
-                "anatomy_score": image.anatomy_score,
-                "prompt_adherence": image.prompt_adherence,
-                "background_score": image.background_score,
+                "overall": image.score_overall,
+                "facial_detail_realism": image.score_facial_detail_realism,
+                "body_proportions": image.score_body_proportions,
+                "complexity_artistry": image.score_complexity_artistry,
+                "composition_framing": image.score_composition_framing,
+                "lighting_color": image.score_lighting_color,
+                "resolution_clarity": image.score_resolution_clarity,
+                "style_consistency": image.score_style_consistency,
+                "prompt_adherence": image.score_prompt_adherence,
+                "artifacts": image.score_artifacts,
                 "use_again": image.use_again.value if image.use_again else None,
-                "score_fidelity": image.score_fidelity,
-                "score_alignment": image.score_alignment,
-                "score_aesthetics": image.score_aesthetics,
                 "flaws": image.flaws,
                 "curation_status": image.curation_status
             },
             "image": {
                 "file_path": image.file_path,
                 "upscale_url": image.upscale_url,
-                "is_rated": image.overall_quality is not None,
+                "is_rated": image.score_overall is not None,
+                "is_failed": image.is_failed,
             }
         })
         

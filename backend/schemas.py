@@ -70,19 +70,23 @@ class UpscaleRequest(BaseModel):
 
 class ScoreRequest(BaseModel):
     """Request body for scoring an image."""
-    overall_quality: Optional[int] = Field(None, ge=1, le=10)
-    anatomy_score: Optional[int] = Field(None, ge=1, le=10)
-    use_again: Optional[str] = Field(None, pattern="^(yes|no|test_more)$")
-    prompt_adherence: Optional[int] = Field(None, ge=1, le=10)
-    background_score: Optional[int] = Field(None, ge=1, le=10)
+    use_again: Optional[str] = Field(None, pattern="^(yes|no|test_more|top_1pct)$")
     is_failed: Optional[bool] = Field(None, description="Mark as failed generation")
-    
-    # New Scoring Fields
-    score_fidelity: Optional[int] = Field(None, ge=1, le=5)
-    score_alignment: Optional[int] = Field(None, ge=1, le=5)
-    score_aesthetics: Optional[int] = Field(None, ge=1, le=5)
+
+    # New scoring dimensions (1-5)
+    score_overall: Optional[int] = Field(None, ge=1, le=5)
+    score_facial_detail_realism: Optional[int] = Field(None, ge=1, le=5)
+    score_body_proportions: Optional[int] = Field(None, ge=1, le=5)
+    score_complexity_artistry: Optional[int] = Field(None, ge=1, le=5)
+    score_composition_framing: Optional[int] = Field(None, ge=1, le=5)
+    score_lighting_color: Optional[int] = Field(None, ge=1, le=5)
+    score_resolution_clarity: Optional[int] = Field(None, ge=1, le=5)
+    score_style_consistency: Optional[int] = Field(None, ge=1, le=5)
+    score_prompt_adherence: Optional[int] = Field(None, ge=1, le=5)
+    score_artifacts: Optional[int] = Field(None, ge=1, le=5)
+
     flaws: Optional[List[str]] = Field(None, description="List of flaws")
-    curation_status: Optional[str] = Field(None, pattern="^(trash|keep|showcase)$")
+    curation_status: Optional[str] = Field(None, pattern="^(trash|use_again|top_1pct)$")
 
 
 # ============ Response Schemas ============
@@ -103,13 +107,19 @@ class ImageResponse(BaseModel):
     file_path: Optional[str] = None
     upscale_url: Optional[str] = None
     inf_id: Optional[str] = None
-    overall_quality: Optional[int] = None
+    score_overall: Optional[int] = None
     is_rated: bool = False
     is_failed: bool = False
-    
-    score_fidelity: Optional[int] = None
-    score_alignment: Optional[int] = None
-    score_aesthetics: Optional[int] = None
+
+    score_facial_detail_realism: Optional[int] = None
+    score_body_proportions: Optional[int] = None
+    score_complexity_artistry: Optional[int] = None
+    score_composition_framing: Optional[int] = None
+    score_lighting_color: Optional[int] = None
+    score_resolution_clarity: Optional[int] = None
+    score_style_consistency: Optional[int] = None
+    score_prompt_adherence: Optional[int] = None
+    score_artifacts: Optional[int] = None
     flaws: Optional[str] = None
     curation_status: Optional[str] = None
 

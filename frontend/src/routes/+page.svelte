@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
 	import { browser } from "$app/environment";
+	import { replaceState } from "$app/navigation";
 	import { toasts } from "$lib/stores/toasts";
 
 	interface Run {
@@ -226,7 +227,7 @@
 				params.delete("autorun");
 				const query = params.toString();
 				const newUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
-				window.history.replaceState({}, "", newUrl);
+				replaceState(newUrl);
 				await runNextJob(true);
 			}
 		}

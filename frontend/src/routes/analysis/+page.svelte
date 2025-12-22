@@ -44,6 +44,7 @@ interface ScoreBreakdown {
             file_path: string | null;
             upscale_url: string | null;
             is_rated: boolean;
+            is_failed?: boolean;
         };
     }
 
@@ -129,6 +130,10 @@ interface ScoreBreakdown {
                 ? data.map((row) => ({
                       ...row,
                       scores: normalizeScores(row.scores),
+                      image: {
+                          ...row.image,
+                          is_failed: row.image?.is_failed ?? false,
+                      },
                   }))
                 : [];
         } catch (e) {
@@ -354,11 +359,11 @@ interface ScoreBreakdown {
                                     </div>
                                 </span>
                             </th>
+                            <th class="p-2 border-r border-gray-400 text-center">
+                                Status
+                            </th>
                             <th class="p-2 border-r border-gray-400 text-center"
                                 >Curation</th
-                            >
-                            <th class="p-2 border-r border-gray-400"
-                                >Flaws</th
                             >
                             <th class="p-2 border-r border-gray-400">Prompt</th>
                             <th class="p-2 text-right">Actions</th>
@@ -445,6 +450,15 @@ interface ScoreBreakdown {
                                             class="font-pixel text-xl font-bold group-hover:text-yellow-300"
                                             >{row.scores.score_overall}</span
                                         >
+                                    {:else}
+                                        <span class="opacity-20">-</span>
+                                    {/if}
+                                </td>
+                                <td class="p-2 text-center">
+                                    {#if row.image.is_failed}
+                                        <span class="text-[9px] font-bold uppercase px-2 py-1 bg-red-600 text-white border border-black shadow-sm">
+                                            Failed
+                                        </span>
                                     {:else}
                                         <span class="opacity-20">-</span>
                                     {/if}

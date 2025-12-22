@@ -136,6 +136,7 @@
         file_path: string | null;
         upscale_url: string | null;
         inf_id: string | null;
+        is_failed: boolean;
         scores: {
             score_overall: number | null;
             score_facial_detail_realism: number | null;
@@ -172,11 +173,45 @@
     });
 
     // Upscale & Comparison State
-    let upscaling = $state(false);
     let compareMode = $state(false);
+    let upscaling = $state(false);
     let upscaleType = $state<"esrgan" | "hires_fix">("esrgan");
-    let upscaleScale = $state(2.0);
-    let upscaleStrength = $state(0.6);
+    let upscaleScale = $state(2);
+    let upscaleStrength = $state(0.4);
+    let magnifierEnabled = $state(false);
+    let magnifierZoom = $state(3);
+    let magnifierSize = $state(240);
+    let magnifierVisible = $state(false);
+    let magnifierImageUrl = $state("");
+    let magnifierImageUrlOriginal = $state("");
+    let magnifierImageUrlEnhanced = $state("");
+    let magnifierSource = $state<"original" | "enhanced" | "single" | null>(null);
+    let magnifierPos = $state({
+        left: 0,
+        top: 0,
+        bgPosX: 0,
+        bgPosY: 0,
+        bgSizeX: 0,
+        bgSizeY: 0,
+    });
+    let magnifierPosOriginal = $state({
+        left: 0,
+        top: 0,
+        bgPosX: 0,
+        bgPosY: 0,
+        bgSizeX: 0,
+        bgSizeY: 0,
+    });
+    let magnifierPosEnhanced = $state({
+        left: 0,
+        top: 0,
+        bgPosX: 0,
+        bgPosY: 0,
+        bgSizeX: 0,
+        bgSizeY: 0,
+    });
+    let originalImgEl: HTMLImageElement | null = null;
+    let enhancedImgEl: HTMLImageElement | null = null;
     let autoAdvance = $state(true);
     const qualityScale = Array.from({ length: 5 }, (_, i) => i + 1);
 
@@ -278,6 +313,7 @@
             const data = await res.json();
             image = {
                 ...data,
+                is_failed: data?.is_failed ?? false,
                 scores: normalizeScoresFromApi(data?.scores, data?.scores),
             };
             if (!image?.upscale_url) compareMode = false;
@@ -308,7 +344,6 @@
             if (data.success) {
                 toasts.success(`Image upscaled via ${upscaleType}`);
                 await fetchDetail();
-                compareMode = true;
             } else {
                 toasts.error(data.detail || "Upscale failed");
             }
@@ -334,8 +369,8 @@
         }
     }
 
-    async function updateScore(payload: any) {
-        if (!image || saving) return;
+    async function updateScore(payload: any): Promise<boolean> {
+        if (!image || saving) return false;
         saving = true;
         try {
             const res = await fetch(
@@ -400,9 +435,11 @@
                 image = {
                     ...image,
                     scores: { ...image.scores, ...normalizedScores },
+                    is_failed: data?.is_failed ?? payload?.is_failed ?? image.is_failed,
                 };
                 // Ensure reactive refresh aligns with backend
                 await fetchDetail();
+                return true;
             } else {
                 toasts.error("Failed to save score");
             }
@@ -411,6 +448,7 @@
         } finally {
             saving = false;
         }
+        return false;
     }
 
     async function submitOverallScore(score: number, advance: boolean) {
@@ -450,6 +488,103 @@
                 `/runs/${page.params.id}/review/${allImageIds[currentIndex - 1]}`,
             );
         }
+    }
+
+    function handleMagnifierToggle() {
+        magnifierEnabled = !magnifierEnabled;
+        if (!magnifierEnabled) {
+            magnifierVisible = false;
+        }
+    }
+
+    function handleMagnifierMove(
+        event: MouseEvent,
+        sourcePath: string | null,
+        sourceKey: "original" | "enhanced" | "single",
+    ) {
+        if (!magnifierEnabled) {
+            magnifierVisible = false;
+            magnifierSource = null;
+            return;
+        }
+
+        const target = event.currentTarget as HTMLImageElement | null;
+        if (!target || !sourcePath) {
+            magnifierVisible = false;
+            magnifierSource = null;
+            return;
+        }
+
+        const rect = target.getBoundingClientRect();
+        const relX = event.clientX - rect.left;
+        const relY = event.clientY - rect.top;
+
+        if (relX < 0 || relY < 0 || relX > rect.width || relY > rect.height) {
+            magnifierVisible = false;
+            magnifierSource = null;
+            return;
+        }
+
+        const normX = rect.width ? relX / rect.width : 0;
+        const normY = rect.height ? relY / rect.height : 0;
+
+        const buildPos = (r: DOMRect) => {
+            const x = r.width * normX;
+            const y = r.height * normY;
+            const bgSizeX = r.width * magnifierZoom;
+            const bgSizeY = r.height * magnifierZoom;
+            const bgPosX = -(x * magnifierZoom - magnifierSize / 2);
+            const bgPosY = -(y * magnifierZoom - magnifierSize / 2);
+            return {
+                left: x - magnifierSize / 2,
+                top: y - magnifierSize / 2,
+                bgPosX,
+                bgPosY,
+                bgSizeX,
+                bgSizeY,
+            };
+        };
+
+        const originalPath = image?.file_path ?? null;
+        const enhancedPath = image?.upscale_url ?? null;
+
+        if (compareMode && originalImgEl && enhancedImgEl && originalPath && enhancedPath) {
+            const rectOriginal = originalImgEl.getBoundingClientRect();
+            const rectEnhanced = enhancedImgEl.getBoundingClientRect();
+            magnifierPosOriginal = buildPos(rectOriginal);
+            magnifierPosEnhanced = buildPos(rectEnhanced);
+            magnifierImageUrlOriginal = getImageUrl(originalPath);
+            magnifierImageUrlEnhanced = getImageUrl(enhancedPath);
+            magnifierSource = sourceKey;
+            magnifierVisible = true;
+            return;
+        }
+
+        // Single-image fallback
+        const bgSizeX = rect.width * magnifierZoom;
+        const bgSizeY = rect.height * magnifierZoom;
+        const bgPosX = -(relX * magnifierZoom - magnifierSize / 2);
+        const bgPosY = -(relY * magnifierZoom - magnifierSize / 2);
+
+        magnifierPos = {
+            left: relX - magnifierSize / 2,
+            top: relY - magnifierSize / 2,
+            bgPosX,
+            bgPosY,
+            bgSizeX,
+            bgSizeY,
+        };
+        magnifierImageUrl = getImageUrl(sourcePath);
+        magnifierSource = sourceKey;
+        magnifierVisible = true;
+    }
+
+    function handleMagnifierLeave() {
+        magnifierVisible = false;
+        magnifierImageUrl = "";
+        magnifierImageUrlOriginal = "";
+        magnifierImageUrlEnhanced = "";
+        magnifierSource = null;
     }
 
     function handleKeydown(e: KeyboardEvent) {
@@ -558,8 +693,57 @@
                         <span class="material-symbols-outlined text-[16px]">open_in_new</span>
                         Full Screen
                     </button>
+                    <div class="flex items-center gap-1">
+                        <button
+                            onclick={handleMagnifierToggle}
+                            class="win95-btn h-9 px-3 text-[10px] font-bold uppercase flex items-center gap-1 {magnifierEnabled
+                                ? 'bg-win-magenta text-white'
+                                : 'bg-white'}"
+                        >
+                            <span class="material-symbols-outlined text-[16px]">search</span>
+                            {magnifierEnabled ? "Magnifier On" : "Magnifier Off"}
+                        </button>
+                        {#if magnifierEnabled}
+                            <div class="flex items-center gap-2 bg-white border border-gray-300 px-2 py-1 rounded-sm shadow-sm">
+                                <label class="flex items-center gap-1 text-[9px] font-bold uppercase">
+                                    Zoom
+                                    <select
+                                        bind:value={magnifierZoom}
+                                        class="win95-inset bg-white border border-gray-400 px-1 py-0.5 text-[9px] font-bold"
+                                    >
+                                        <option value={1.5}>1.5x</option>
+                                        <option value={2}>2x</option>
+                                        <option value={3}>3x</option>
+                                        <option value={4}>4x</option>
+                                    </select>
+                                </label>
+                                <label class="flex items-center gap-1 text-[9px] font-bold uppercase">
+                                    Size
+                                    <select
+                                        bind:value={magnifierSize}
+                                        class="win95-inset bg-white border border-gray-400 px-1 py-0.5 text-[9px] font-bold"
+                                    >
+                                        <option value={120}>120px</option>
+                                        <option value={160}>160px</option>
+                                        <option value={200}>200px</option>
+                                        <option value={240}>240px</option>
+                                    </select>
+                                </label>
+                            </div>
+                        {/if}
+                    </div>
                 </div>
                 <div class="flex gap-2 items-center">
+                    <button
+                        onclick={async () => {
+                            const ok = await updateScore({ is_failed: true, score_overall: null });
+                            if (ok) navigateNext();
+                        }}
+                        class="win95-btn h-9 px-3 text-[10px] font-bold uppercase flex items-center gap-2 bg-red-600 text-white"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">report</span>
+                        Didn't Generate
+                    </button>
                     {#if image.upscale_url}
                         <button
                             onclick={() => (compareMode = !compareMode)}
@@ -613,13 +797,27 @@
                                 >
                             </div>
                             <div
-                                class="flex-1 win95-inset bg-black/10 flex items-center justify-center overflow-hidden"
+                                class="flex-1 win95-inset bg-black/10 flex items-center justify-center overflow-hidden relative"
                             >
                                 <img
+                                    bind:this={originalImgEl}
                                     src={getImageUrl(image.file_path)}
                                     alt="Original"
                                     class="max-w-full max-h-full object-contain shadow-retro-raised"
+                                    onmousemove={(event) =>
+                                        handleMagnifierMove(
+                                            event,
+                                            image?.file_path ?? null,
+                                            "original",
+                                        )}
+                                    onmouseleave={handleMagnifierLeave}
                                 />
+                                {#if magnifierEnabled && magnifierVisible}
+                                    <div
+                                        class="pointer-events-none absolute rounded-full border-2 border-white shadow-[0_4px_20px_rgba(0,0,0,0.4)]"
+                                        style={`width:${magnifierSize}px;height:${magnifierSize}px;left:${magnifierPosOriginal.left}px;top:${magnifierPosOriginal.top}px;background-image:url('${magnifierImageUrlOriginal || magnifierImageUrl}');background-size:${magnifierPosOriginal.bgSizeX}px ${magnifierPosOriginal.bgSizeY}px;background-position:${magnifierPosOriginal.bgPosX}px ${magnifierPosOriginal.bgPosY}px;background-repeat:no-repeat;`}
+                                    ></div>
+                                {/if}
                             </div>
                         </div>
                         <div class="flex flex-col gap-2 h-full">
@@ -636,10 +834,24 @@
                                 class="flex-1 win95-inset bg-black/5 flex items-center justify-center overflow-hidden relative"
                             >
                                 <img
+                                    bind:this={enhancedImgEl}
                                     src={getImageUrl(image.upscale_url)}
                                     alt="Upscaled"
                                     class="max-w-full max-h-full object-contain shadow-retro-raised"
+                                    onmousemove={(event) =>
+                                        handleMagnifierMove(
+                                            event,
+                                            image?.upscale_url ?? null,
+                                            "enhanced",
+                                        )}
+                                    onmouseleave={handleMagnifierLeave}
                                 />
+                                {#if magnifierEnabled && magnifierVisible}
+                                    <div
+                                        class="pointer-events-none absolute rounded-full border-2 border-white shadow-[0_4px_20px_rgba(0,0,0,0.4)]"
+                                        style={`width:${magnifierSize}px;height:${magnifierSize}px;left:${magnifierPosEnhanced.left}px;top:${magnifierPosEnhanced.top}px;background-image:url('${magnifierImageUrlEnhanced || magnifierImageUrl}');background-size:${magnifierPosEnhanced.bgSizeX}px ${magnifierPosEnhanced.bgSizeY}px;background-position:${magnifierPosEnhanced.bgPosX}px ${magnifierPosEnhanced.bgPosY}px;background-repeat:no-repeat;`}
+                                    ></div>
+                                {/if}
                             </div>
                         </div>
                     </div>
@@ -649,14 +861,23 @@
                         style="height: calc(100vh - 190px); max-height: calc(100vh - 190px); max-width: calc(100vw - 420px); width: 100%"
                     >
                         <img
-                            src={getImageUrl(
-                                !compareMode || !image.upscale_url
-                                    ? image.file_path
-                                    : image.upscale_url,
-                            )}
+                            src={getImageUrl(image.upscale_url ?? image.file_path)}
                             alt="Generated artwork"
                             class="object-contain max-h-full max-w-full w-auto h-auto drop-shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+                            onmousemove={(event) =>
+                                handleMagnifierMove(
+                                    event,
+                                    image?.upscale_url ?? image?.file_path ?? null,
+                                    "single",
+                                )}
+                            onmouseleave={handleMagnifierLeave}
                         />
+                        {#if magnifierEnabled && magnifierVisible}
+                            <div
+                                class="pointer-events-none absolute rounded-full border-2 border-white shadow-[0_4px_20px_rgba(0,0,0,0.4)]"
+                                style={`width:${magnifierSize}px;height:${magnifierSize}px;left:${magnifierPos.left}px;top:${magnifierPos.top}px;background-image:url('${magnifierImageUrl}');background-size:${magnifierPos.bgSizeX}px ${magnifierPos.bgSizeY}px;background-position:${magnifierPos.bgPosX}px ${magnifierPos.bgPosY}px;background-repeat:no-repeat;`}
+                            ></div>
+                        {/if}
 
                         <!-- Floating score badge -->
                         <div
@@ -667,7 +888,7 @@
                             >
                             <span class="text-2xl text-win-magenta"
                             >{image.scores.score_overall || "--"}</span
-                        >
+                            >
                         </div>
 
                     </div>

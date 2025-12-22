@@ -67,8 +67,10 @@ app.include_router(analysis_router)
 # Mount static files for serving images
 settings = get_settings()
 images_path = Path(settings.images_dir)
-if images_path.exists():
-    app.mount("/images", StaticFiles(directory=str(images_path)), name="images")
+assets_path = Path(settings.assets_dir)
+images_path.mkdir(parents=True, exist_ok=True)
+assets_path.mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(images_path)), name="images")
 
 
 @app.get("/")

@@ -27,6 +27,7 @@ class UseAgain(enum.Enum):
     yes = "yes"
     no = "no"
     test_more = "test_more"
+    top_1pct = "top_1pct"
 
 
 def generate_uuid() -> str:
@@ -63,21 +64,30 @@ class Image(Base):
     inf_id = Column(String(100), nullable=True)  # SinkIn inference ID
     batch_index = Column(Integer, nullable=True)  # Index in the batch (0-N)
     is_failed = Column(Boolean, default=False, nullable=False)
-    
-    # New Scoring System (RLHF-Style)
-    score_fidelity = Column(Integer, nullable=True)     # Visual Fidelity (Tech score)
-    score_alignment = Column(Integer, nullable=True)    # Prompt Alignment (accuracy)
-    score_aesthetics = Column(Integer, nullable=True)   # Aesthetics (Vibe score)
-    flaws = Column(Text, nullable=True)                 # JSON list of specific flaws tags
-    curation_status = Column(String(20), nullable=True) # "trash", "keep", "showcase"
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
-    # Scoring fields
+
+    # Legacy scoring fields (kept for historical data but no longer used)
     overall_quality = Column(Integer, nullable=True)  # 1-10
     anatomy_score = Column(Integer, nullable=True)  # 1-10
-    use_again = Column(SQLEnum(UseAgain), nullable=True)
     prompt_adherence = Column(Integer, nullable=True)  # 1-10
     background_score = Column(Integer, nullable=True)  # 1-10
+
+    # New scoring system (all 1-5)
+    score_overall = Column(Integer, nullable=True)
+    score_facial_detail_realism = Column(Integer, nullable=True)
+    score_body_proportions = Column(Integer, nullable=True)
+    score_complexity_artistry = Column(Integer, nullable=True)
+    score_composition_framing = Column(Integer, nullable=True)
+    score_lighting_color = Column(Integer, nullable=True)
+    score_resolution_clarity = Column(Integer, nullable=True)
+    score_style_consistency = Column(Integer, nullable=True)
+    score_prompt_adherence = Column(Integer, nullable=True)
+    score_artifacts = Column(Integer, nullable=True)
+
+    # Additional metadata
+    use_again = Column(SQLEnum(UseAgain), nullable=True)
+    flaws = Column(Text, nullable=True)  # JSON list of flaws tags
+    curation_status = Column(String(20), nullable=True)  # "trash", "use_again", "top_1pct"
 
     # Relationships
     run = relationship("Run", back_populates="images")

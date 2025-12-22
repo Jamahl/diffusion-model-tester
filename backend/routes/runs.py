@@ -188,10 +188,10 @@ async def list_runs(
         # Count images for this run
         total_images = db.query(Image).filter(Image.run_id == run.id).count()
         
-        # Count unrated images (no overall_quality score)
+        # Count unrated images (no overall score)
         unrated_count = db.query(Image).filter(
             Image.run_id == run.id,
-            Image.overall_quality.is_(None)
+            Image.score_overall.is_(None)
         ).count()
         
         # Count upscaled images (has upscale_url)
@@ -242,7 +242,7 @@ async def get_run(run_id: str, db: Session = Depends(get_db)):
     total_images = db.query(Image).filter(Image.run_id == run.id).count()
     unrated_count = db.query(Image).filter(
         Image.run_id == run.id,
-        Image.overall_quality.is_(None)
+        Image.score_overall.is_(None)
     ).count()
     upscaled_count = db.query(Image).filter(
         Image.run_id == run.id,
